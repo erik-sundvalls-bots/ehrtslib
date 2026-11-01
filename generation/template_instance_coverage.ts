@@ -4,7 +4,7 @@
  */
 
 import * as openehr_am from "../openehr_am.ts";
-import { isSubtypeOf } from "../meta/mod.ts";
+import { hasRmAttribute, isSubtypeOf } from "../meta/mod.ts";
 import type { GenerationMode } from "./rm_instance_generator.ts";
 
 type Bounds = { min: number; max: number; unbounded: boolean };
@@ -222,7 +222,7 @@ function collectExpected(
   for (const attr of cObject.attributes ?? []) {
     if (!shouldIncludeAttribute(attr, mode)) continue;
     const attrName = attr.rm_attribute_name;
-    if (!attrName) continue;
+    if (!attrName || !hasRmAttribute(cObject.rm_type_name, attrName)) continue;
     const children = attr.children ?? [];
 
     if (attr instanceof openehr_am.C_MULTIPLE_ATTRIBUTE) {
