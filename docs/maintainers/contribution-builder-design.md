@@ -384,12 +384,12 @@ for review:
   | uid | `<uuid>::a3.17` | that one node instance |
   | ADL2 codes | `openEHR-EHR-OBSERVATION.blood_pressure.v2/data[id2]/events[id7]/data[id4]/items[id5]` | Systolic in every event |
   | ADL 1.4 codes | `openEHR-EHR-OBSERVATION.blood_pressure.v2/data[at0001]/events[at0006]/data[at0003]/items[at0004]` | the same, at-codes mapped to id-codes |
-  | Names, default `lang.1` (en) | `Vital signs/Blood pressure/Any event/Systolic` | the same |
-  | Names, `lang=sv` | `Vitalparametrar/Blodtryck/Ospecificerad händelse/Systoliskt` | the same |
+  | Names, default `lang.1` (en) | `Blood pressure/Any event/Systolic` | the same |
+  | Names, `lang=sv` | `Blodtryck/Ospecificerad händelse/Systoliskt` | the same |
   | Annotation | `@ui.section=vitals` | the five observations |
   | Symbol (`a.id`) | `$systolic` | Systolic in every event |
   | Symbol (`am.symbol_binding`) | `$bp` | the Blood pressure observation |
-  | 0-based index | `Vital signs/Blood pressure/Any event:1/Systolic` | Systolic in the second event |
+  | 0-based index | `Blood pressure/Any event:1/Systolic` | Systolic in the second event |
   | Mixed | `$bp/Any event:0/data[id4]/items[id5]` | Systolic in the first event |
   | Ambiguous | `$rate` | Rate in Respiration and in Pulse; a mutation fails and lists both |
   | Narrowed | `$pulse/$rate` or `Respiration/$rate` | only the Pulse rate, or only the Respiration rate |
