@@ -1,8 +1,8 @@
 # ADL2 coding system: at-codes (ADL 2.4) and id-codes in one library
 
-Status: proposed. Refs [#246](https://github.com/ErikSundvall/ehrtslib/issues/246).
+Status: accepted (2026-11-01), implemented. Refs [#246](https://github.com/ErikSundvall/ehrtslib/issues/246).
 
-## Decision (proposed)
+## Decision
 
 **Option 2: both ADL2 variants in one build. The coding system is a
 property of each archetype or template. at-coded stays the default for
@@ -56,9 +56,9 @@ Conversion code:
 | `contribution_builder/adl14_downconvert.ts` | 221 |
 
 That is about 1,800 lines. All of it is needed in every option, because
-OPT 1.4 import and CDR down-conversion stay. No `adl14AtToId` symbol exists.
-The 1.4 → id mapping lives in `opt14_code_mapping.ts` and
-`adl14_to_adl2_converter.ts`.
+OPT 1.4 import and CDR down-conversion stay. The 1.4 → id mapping is
+`adl14AtToId` in `adl14_to_adl2_converter.ts`, used by
+`opt14_code_mapping.ts`; `idToAtCode` is its reverse.
 
 **Ad hoc coding-system checks** (about 25 sites in 15 files) use regexes
 such as `/^id\d/` and `/^at\d/`, and `startsWith("id")`:
@@ -146,10 +146,47 @@ the parser must read both styles in any case.
 Items 1–3 are bug fixes that are worth doing whatever is decided.
 Items 4–6 make the existing opt-in usable for testing ADL 2.4.
 
-## Open questions
+## Decisions on the open questions
 
-- Keep at-coded as the default before AM 2.4.0, or default to id-coded
-  until AM 2.4.0 is released? at-coded matches openEHR RM data and the 0.8.0
-  decision. id-coded matches the released AM 2.3 and current ADL2 tools.
-- Should an at-coded artefact carrying an ADL 2.0–2.3 header be rejected,
-  or only warned about, on parse?
+- **Default:** at-coded stays the default before AM 2.4.0. It matches
+  openEHR RM data and the 0.8.0 decision (#181). It is documented as
+  experimental until AM 2.4.0 is released.
+- **Header mismatch on read:** an at-coded artefact with an ADL 2.0–2.3
+  `adl_version` parses with a warning, not an error, so reading stays
+  tolerant.
+
+## Implementation
+
+All six next-release items are done:
+
+1. `adl2CodingSystemOf`, `isAdl14Artefact` (replaces `hasAdl14NodeIds`)
+   and `adl2CodingVersionWarning` in `parser/legacy/adl2_coding_system.ts`.
+   Template binding uses them; the ADL2 parser warns on a header mismatch.
+2. `nodeIdToAtCode` and `nodeIdsMatch` in `generation/id_to_at_code.ts`
+   (by `idToAtCode`) replace the naive copies in `normalize.ts`,
+   `instance_nav.ts`, `rm_instance_builder.ts`, `flat_context_defaults.ts`,
+   `archetype_path_resolver.ts` and `aom_path_navigator.ts`.
+3. Web Template parity: data values and node ids minted on up-conversion
+   (marked with a non-enumerable flag, so not in JSON or template hashes)
+   have no node id in paths; the ELEMENT's term names a leaf; a code
+   missing from an archetype's terms does not fall back to the flat
+   template terms (also for id-codes). The parity test covers every
+   `test_data/opt14` fixture in both coding systems: ids, names, paths,
+   occurrences and node ids are equal.
+4. `adl_version=2.4.0` on at-coded output (`AT_CODED_ADL_VERSION`,
+   `adl2VersionFor`); id-coded output keeps `2.0.5` / `2.0.6`.
+5. Golden at-coded fixtures in `test_data/adl2/at-coded/` (three OPT2
+   files and one archetype), regenerated with `UPDATE_GOLDEN=1`.
+6. README and `docs/ADL_SUPPORT.md` "ADL2 coding systems".
+
+Known limits, not in scope here:
+
+- Minted node ids are not marked in ADL2 text. After writing and
+  re-parsing, a node that had no id in OPT 1.4 (for example a nested
+  CLUSTER) gets its minted id in paths.
+- OPT2 text round trip loses some archetype term scopes and occurrences
+  (names and `max` differ after re-parsing), so the golden test compares
+  paths, types and node ids only.
+- Node ids are mapped one-to-one by `idToAtCode`. A node id that the
+  collision-free OPT 1.4 export (`buildAdl14CodeMap`) moves to `at9000+`
+  keeps its shifted code in Web Template paths.
