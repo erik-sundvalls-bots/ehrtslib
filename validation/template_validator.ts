@@ -1181,12 +1181,19 @@ function matchConstraintChild(
     ? (rmItem as { archetype_node_id?: unknown }).archetype_node_id
     : undefined;
   if (typeof nodeId === "string" && nodeId) {
-    const byId = children.find((child) =>
+    const byId = children.filter((child) =>
       child instanceof openehr_am.C_ARCHETYPE_ROOT
         ? child.archetype_ref === nodeId
         : child.node_id === nodeId
     );
-    if (byId) return byId;
+    // Siblings with the same node id (same archetype used twice, or a node
+    // cloned with another name) are told apart by their name constraint.
+    if (byId.length > 1) {
+      const name = (rmItem as { name?: unknown }).name;
+      const byName = byId.find((child) => nameConstraintAccepts(child, name));
+      if (byName) return byName;
+    }
+    if (byId.length) return byId[0];
   }
   const actual = TypeRegistry.getTypeNameFromInstance(rmItem);
   if (!actual) return children[0];
@@ -1195,6 +1202,34 @@ function matchConstraintChild(
     if (!expected) return false;
     return actual === expected || isSubtypeOf(actual, expected);
   });
+}
+
+/**
+ * True when `child` has no name constraint or its name constraint accepts the
+ * RM `name` (a DV_TEXT value list, or DV_CODED_TEXT codes).
+ */
+function nameConstraintAccepts(child: openehr_am.C_OBJECT, name: unknown): boolean {
+  const nameAttr = (child as openehr_am.C_COMPLEX_OBJECT).attributes?.find((a) =>
+    a.rm_attribute_name === "name"
+  );
+  const nameObj = nameAttr?.children?.[0] as openehr_am.C_COMPLEX_OBJECT | undefined;
+  if (!nameObj?.attributes?.length) return true;
+  const rec = (name ?? {}) as { value?: unknown; defining_code?: { code_string?: unknown } };
+  for (const attr of nameObj.attributes) {
+    const c = unwrapPrimitiveConstraint(attr.children?.[0]) as {
+      list?: string[];
+      code_list?: string[];
+      constraint?: string;
+    } | undefined;
+    if (attr.rm_attribute_name === "value" && c?.list?.length) {
+      return c.list.includes(String(rec.value ?? ""));
+    }
+    if (attr.rm_attribute_name === "defining_code") {
+      const codes = c?.code_list?.length ? c.code_list : (c?.constraint ? [c.constraint] : []);
+      if (codes.length) return codes.includes(String(rec.defining_code?.code_string ?? ""));
+    }
+  }
+  return true;
 }
 
 function terminologyIdOf(code: unknown): string | undefined {
