@@ -328,6 +328,21 @@ const FORMS: Record<string, FlatForm> = {
       f("meaning", ["meaning", "value"], "string", { intermediates: { meaning: "DV_TEXT" } }),
       f("target", ["target", "value"], "string", { intermediates: { target: "DV_EHR_URI" } }),
     ],
+    // A coded meaning: `|meaning|code`, `|meaning|terminology`, `|meaning|value`
+    // (spec "RM Attributes prefix" LINK example).
+    encodeExtra: (obj, fields) => {
+      const meaning = rmProp(obj, "meaning");
+      const code = rmProp(meaning, "defining_code");
+      if (code == null) return;
+      const codeString = rmProp(code, "code_string");
+      const terminology = rmProp(rmProp(code, "terminology_id"), "value");
+      if (codeString == null) return;
+      delete fields.meaning;
+      fields["meaning|code"] = String(codeString);
+      if (terminology != null) fields["meaning|terminology"] = String(terminology);
+      const value = rmProp(meaning, "value");
+      if (value != null) fields["meaning|value"] = String(value);
+    },
   },
   OBJECT_REF: { fields: OBJECT_REF_FIELDS, complete: (o) => fixObjectIdType(o) },
   PARTY_REF: { fields: OBJECT_REF_FIELDS, complete: (o) => fixObjectIdType(o) },
