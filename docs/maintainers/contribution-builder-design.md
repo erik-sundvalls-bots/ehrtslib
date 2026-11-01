@@ -252,7 +252,9 @@ Summary of [ADR 0007](../adr/0007-cb-template-binding.md):
   both absent (ADR 0007, 0010).
 - ADL 1.4 sources: ehrtslib converts ADL 1.4 **archetype** text to ADL2
   (`parser/adl14_to_adl2_converter.ts`), and a legacy OPT 1.4 XML to an ADL2
-  operational template with id-codes (`parser.upconvertOpt14ToAdl2`, #163).
+  operational template (`parser.upconvertOpt14ToAdl2`, #163). Both use
+  ADL 2.4 at-codes by default; `adl2CodingSystem: "id-coded"` gives
+  ADL 2.0–2.3 id-codes (#181, ADR 0015).
   The hash rule and code mapping are described in ADR 0007, section
   "Implementation".
 
