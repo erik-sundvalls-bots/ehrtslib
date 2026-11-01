@@ -633,8 +633,6 @@ function fillIsmFromWebTemplate(
 ): void {
   // ISM_TRANSITION is PATHABLE, not LOCATABLE: it has no archetype_node_id.
   // The template variant is identified by careflow_step / current_state.
-  // Older data (or a |raw object) may still carry the key; drop it.
-  delete ism.archetype_node_id;
   const variant = inferFromCareflow(ism, ismWt);
 
   const currentWt = ismWt.children?.find((c) => c.id === "current_state");

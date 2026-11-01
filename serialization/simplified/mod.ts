@@ -69,7 +69,6 @@ export {
 export { structuredToFlat } from "./structured_to_flat.ts";
 
 export {
-  collectExpectedFlatKeys,
   type FlatValidatorOptions,
   validateFlatPayload,
 } from "./flat_validator.ts";

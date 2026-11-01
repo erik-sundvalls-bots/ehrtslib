@@ -212,26 +212,3 @@ export function validateFlatPayload(
   };
 }
 
-/** @deprecated retained for compatibility; prefer validateFlatPayload. */
-export function collectExpectedFlatKeys(webTemplate: WebTemplate): Set<string> {
-  const keys = new Set<string>();
-  const rootId = templateRootId(webTemplate.templateId);
-  const walk = (node: WebTemplateNode, parts: string[]) => {
-    const next = [...parts, node.id];
-    const isLeaf = !!node.inputs?.length && !node.children?.length;
-    if (isLeaf) {
-      for (const input of node.inputs ?? []) {
-        const suffix = input.suffix ?? "";
-        keys.add(
-          suffix === ""
-            ? next.join("/")
-            : `${next.join("/")}|${suffix}`,
-        );
-      }
-      return;
-    }
-    for (const child of node.children ?? []) walk(child, next);
-  };
-  for (const child of webTemplate.tree.children ?? []) walk(child, [rootId]);
-  return keys;
-}
