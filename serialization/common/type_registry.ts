@@ -29,12 +29,19 @@ export class TypeRegistry {
   }
 
   /**
-   * Get constructor for a type name
+   * Get constructor for a type name. Generic type names such as
+   * `DV_INTERVAL<DV_COUNT>` (openEHR ITS-JSON writes generic parameters in
+   * `_type`) resolve to the class of the base type (`DV_INTERVAL`).
    * @param typeName - The openEHR type name
    * @returns The constructor function or undefined if not found
    */
   static getConstructor(typeName: string): (new () => any) | undefined {
-    return this.typeNameToConstructor.get(typeName);
+    const exact = this.typeNameToConstructor.get(typeName);
+    if (exact) return exact;
+    const lt = typeName.indexOf("<");
+    return lt > 0
+      ? this.typeNameToConstructor.get(typeName.slice(0, lt).trim())
+      : undefined;
   }
 
   /**

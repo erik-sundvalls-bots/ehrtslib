@@ -3,13 +3,21 @@
  */
 
 import * as openehr_am from "../../am/openehr_am.ts";
+import { adl14CodeFor } from "../../generation/adl14_code_map_cache.ts";
+import { externalCodeOf } from "../../generation/id_to_at_code.ts";
 import type {
   QuantityItemInterval,
   QuantityItemRuntime,
 } from "../../parser/legacy/xml_aom_mapper.ts";
 import * as openehr_base from "../../base/openehr_base.ts";
 import { isDataValueType as metaIsDataValueType } from "../../meta/mod.ts";
+import {
+  adl2CodingSystemOf,
+  isSyntheticNodeId,
+  markSyntheticNodeId,
+} from "../../parser/legacy/adl2_coding_system.ts";
 import type {
+  CollapsedRmObject,
   WebTemplate,
   WebTemplateInput,
   WebTemplateInputListItem,
@@ -32,6 +40,10 @@ import {
 } from "../../generation/term_scope.ts";
 import { languageCode } from "../../generation/term_codes.ts";
 import {
+  instructionStateCodes,
+  instructionStateRubric,
+} from "../../term/openehr_group_rubrics.ts";
+import {
   readTemplateId,
   type TermBag,
   type TermDefinitionTable,
@@ -42,6 +54,10 @@ import {
   flattenOptPathAnnotations,
   type OptPathAnnotationMap,
 } from "../../generation/opt_l10n.ts";
+import {
+  useRmAttributeAsWebTemplateId,
+  webTemplateChildIdHint,
+} from "./web_template_id_hints.ts";
 
 /** Empty complex shell so a slot still appears as a node, as it did when OPT XML mapped slots to `C_COMPLEX_OBJECT`. */
 function complexShellFromSlot(
@@ -59,6 +75,7 @@ function complexShellFromSlot(
   if (src[TERM_NAME_FALLBACK_NODE_ID_KEY]) {
     dest[TERM_NAME_FALLBACK_NODE_ID_KEY] = src[TERM_NAME_FALLBACK_NODE_ID_KEY];
   }
+  if (isSyntheticNodeId(slot)) markSyntheticNodeId(obj);
   return obj;
 }
 
@@ -85,7 +102,15 @@ export interface WebTemplateBuilderOptions {
    * fixed `name/value` predicate already written in the OPT.
    */
   idLanguage?: WebTemplateIdLanguage;
-  /** Mark composition-level metadata nodes as ctx (for FLAT ctx/ prefix). */
+  /**
+   * Add `inContext` nodes for RM attributes the template does not constrain
+   * but the RM requires (composition `category`, `context/start_time`,
+   * `context/setting`, `composer`, `language`, `territory`; entry `language`,
+   * `encoding`, `subject`; event `time`; observation `history_origin`; action
+   * `time`; instruction `narrative`; activity `timing`). Default true.
+   * The nodes sit at their own paths, so the output flavour can write these
+   * values there and the input flavour can supply them from `ctx/`.
+   */
   includeContextNodes?: boolean;
   /**
    * Promote OPT `L10n.{lang}` path annotations into node `localizedNames`
@@ -109,6 +134,117 @@ const CONTEXT_ATTRS = new Set([
   "context",
 ]);
 
+/** ENTRY subtypes that get `language`, `encoding` and `subject` nodes. */
+const ENTRY_RM_TYPES = new Set([
+  "OBSERVATION",
+  "EVALUATION",
+  "INSTRUCTION",
+  "ACTION",
+  "ADMIN_ENTRY",
+]);
+
+const CONTEXT_NODE_NAMES: Record<string, string> = {
+  category: "Category",
+  start_time: "Start_time",
+  setting: "Setting",
+  composer: "Composer",
+  language: "Language",
+  territory: "Territory",
+  encoding: "Encoding",
+  subject: "Subject",
+  time: "Time",
+  history_origin: "History origin",
+  narrative: "Narrative",
+  timing: "Timing",
+  width: "Width",
+  math_function: "Math function",
+  action_archetype_id: "Action archetype id",
+  current_state: "Current_state",
+  transition: "Transition",
+  careflow_step: "Careflow_step",
+};
+
+/**
+ * `inContext` node for an RM attribute that the template does not constrain.
+ * Its value may come from the node path, from `ctx/`, or from a default.
+ */
+function rmContextNode(
+  id: string,
+  rmType: string,
+  aqlPath: string,
+  inputs?: WebTemplateInput[],
+  min = 1,
+): WebTemplateNode {
+  return {
+    id,
+    name: CONTEXT_NODE_NAMES[id] ?? id,
+    rmType,
+    min,
+    max: 1,
+    aqlPath,
+    inContext: true,
+    inputs: inputs ?? inputsForRmType(resolveDvType(rmType)),
+  };
+}
+
+/**
+ * Input of an ACTIVITY `action_archetype_id` node. A template pattern (C_STRING
+ * on the attribute) becomes `validation.pattern` and the default value
+ * `/pattern/`, which the deserializer uses when the payload has none.
+ */
+function actionArchetypeIdInput(obj?: openehr_am.C_COMPLEX_OBJECT): WebTemplateInput {
+  const attr = (obj?.attributes ?? []).find((a) => a.rm_attribute_name === "action_archetype_id");
+  const child = attr?.children?.[0] as { item?: { pattern?: string; list?: string[] }; pattern?: string; list?: string[] } | undefined;
+  const constraint = child?.item ?? child;
+  const pattern = constraint?.pattern ?? (constraint?.list?.length === 1 ? constraint.list[0] : undefined);
+  if (!pattern) return { type: "TEXT" };
+  const bare = pattern.replace(/^\/(.*)\/$/, "$1");
+  return { type: "TEXT", validation: { pattern: bare }, defaultValue: `/${bare}/` };
+}
+
+/**
+ * ISM_TRANSITION of an ACTION whose template does not constrain it: any
+ * openEHR instruction state as `current_state`.
+ */
+function defaultIsmTransitionNode(aqlPath: string): WebTemplateNode {
+  const currentInputs = inputsForRmType("DV_CODED_TEXT").map((input) =>
+    input.suffix === "code"
+      ? {
+        ...input,
+        terminology: "openehr",
+        list: instructionStateCodes().map((code) => ({
+          value: code,
+          label: instructionStateRubric(code) ?? code,
+        })),
+      }
+      : input
+  );
+  return {
+    id: "ism_transition",
+    name: "Ism_transition",
+    rmType: "ISM_TRANSITION",
+    min: 1,
+    max: 1,
+    aqlPath,
+    inContext: true,
+    children: [
+      rmContextNode("current_state", "DV_CODED_TEXT", `${aqlPath}/current_state`, currentInputs),
+      rmContextNode("transition", "DV_CODED_TEXT", `${aqlPath}/transition`, undefined, 0),
+      rmContextNode("careflow_step", "DV_CODED_TEXT", `${aqlPath}/careflow_step`, undefined, 0),
+    ],
+  };
+}
+
+/** Append nodes whose id is not already a child of `node`. */
+function appendMissing(node: WebTemplateNode, extra: WebTemplateNode[]): void {
+  const children = node.children ?? [];
+  const ids = new Set(children.map((c) => c.id));
+  for (const child of extra) {
+    if (!ids.has(child.id)) children.push(child);
+  }
+  node.children = children;
+}
+
 /** Unwrap plain numbers or primitive wrapper objects (Integer) to number. */
 function boundValue(v: unknown): number | undefined {
   if (typeof v === "number") return v;
@@ -126,6 +262,42 @@ function multiplicityBounds(
   const min = boundValue(m.lower) ?? 0;
   const max = m.upper_unbounded ? -1 : (boundValue(m.upper) ?? 1);
   return { min, max };
+}
+
+function attributeExistenceBounds(
+  attr: openehr_am.C_ATTRIBUTE,
+): { min: number; max: number } {
+  const existence = (attr as { existence?: openehr_base.Multiplicity_interval })
+    .existence;
+  return multiplicityBounds(existence);
+}
+
+function rmAttributeIdentity(
+  attrName: string,
+): Pick<WebTemplateNode, "id" | "name"> {
+  const id = normalizeWebTemplateId(attrName);
+  return { id, name: attrName };
+}
+
+function isRmAttributeValueLeaf(obj: openehr_am.C_COMPLEX_OBJECT): boolean {
+  const rmType = obj.rm_type_name ?? "";
+  return isDataValueType(rmType);
+}
+
+function singleConstrainedCode(
+  ism: openehr_am.C_COMPLEX_OBJECT,
+  attrName: string,
+): string | undefined {
+  const attr = ism.attributes?.find((a) => a.rm_attribute_name === attrName);
+  const dv = (attr as { children?: openehr_am.C_OBJECT[] })?.children?.[0];
+  if (!(dv instanceof openehr_am.C_COMPLEX_OBJECT)) return undefined;
+  const dcAttr = dv.attributes?.find((a) =>
+    a.rm_attribute_name === "defining_code"
+  );
+  const phrase = (dcAttr as { children?: openehr_am.C_OBJECT[] })?.children?.[0];
+  const list = (phrase as { code_list?: string[] } | undefined)?.code_list;
+  if (list?.length === 1) return list[0];
+  return (phrase as { constraint?: string } | undefined)?.constraint;
 }
 
 function lookupTerm(
@@ -266,11 +438,16 @@ function applyTerminologyInputs(
   const codes = term.code_list?.length
     ? term.code_list
     : (term.constraint ? [term.constraint] : []);
+  const terminology = term.terminology_id ?? term.assumed_value?.terminology_id;
   if (codes.length) {
     codeInput.list = codes.map((value) => {
       const labels = labelsFor(value, scope);
       const item: WebTemplateInputListItem = { value };
-      if (labels.label) item.label = labels.label;
+      const openehrRubric = terminology === "openehr"
+        ? instructionStateRubric(value)
+        : undefined;
+      if (openehrRubric) item.label = openehrRubric;
+      else if (labels.label) item.label = labels.label;
       if (labels.localizedLabels) item.localizedLabels = labels.localizedLabels;
       if (labels.localizedDescriptions) {
         item.localizedDescriptions = labels.localizedDescriptions;
@@ -280,14 +457,27 @@ function applyTerminologyInputs(
   }
   const assumed = term.assumed_value?.code_string;
   if (assumed) codeInput.defaultValue = assumed;
-  const terminology = term.terminology_id ?? term.assumed_value?.terminology_id;
   if (terminology) codeInput.terminology = terminology;
+}
+
+/**
+ * Archetype term bag for a node's scope. When it exists, a code missing from
+ * it must not be read from the flat template terms: base at-codes collide
+ * across archetypes (for example a node id minted on up-conversion).
+ */
+function scopedBagFor(
+  archetype: Record<string, TermBag>,
+  scope: string | undefined,
+): TermBag | undefined {
+  return scope ? archetype[scope] : undefined;
 }
 
 function isDataValueType(rmType: string): boolean {
   // Web Template also treats AM constraint types (C_*) as "value-like" leaves.
-  return metaIsDataValueType(rmType) || rmType === "CODE_PHRASE" ||
-    rmType.startsWith("C_");
+  // Generic names (`DV_INTERVAL<DV_COUNT>`) count by their base type.
+  const base = rmType.split("<")[0].trim();
+  return metaIsDataValueType(base) || base === "CODE_PHRASE" ||
+    base.startsWith("C_");
 }
 
 /**
@@ -297,6 +487,12 @@ function isDataValueType(rmType: string): boolean {
 function constraintNodeId(obj: openehr_am.C_OBJECT): string | undefined {
   const ref = (obj as openehr_am.C_ARCHETYPE_ROOT).archetype_ref;
   if (obj instanceof openehr_am.C_ARCHETYPE_ROOT && ref) return ref;
+  // Data values are not LOCATABLE: no node id in RM data or AQL paths (ADL2
+  // still gives their constraints one). Node ids minted on OPT 1.4
+  // up-conversion are not in the OPT 1.4 a CDR holds.
+  if (isDataValueType(obj.rm_type_name ?? "") || isSyntheticNodeId(obj)) {
+    return undefined;
+  }
   return nodeIdToAtCode(obj.node_id) || undefined;
 }
 
@@ -330,6 +526,11 @@ export function fixedNameConstraint(
  * sibling shares the node id and the child has a fixed name constraint
  * (repeated, renamed archetype occurrences).
  */
+/** `attr[nodeId]`, or `attr` when the node has no node id in paths. */
+function pathSegment(attrName: string, nodeId: string | undefined): string {
+  return nodeId ? `${attrName}[${nodeId}]` : attrName;
+}
+
 function childPathPredicate(
   child: openehr_am.C_OBJECT,
   siblings: openehr_am.C_OBJECT[],
@@ -388,9 +589,13 @@ export class WebTemplateBuilder {
   private lang = "en";
   private options?: WebTemplateBuilderOptions;
   private includeContext: boolean;
+  /** RM objects without a node of their own, by AQL path. */
+  private collapsed: Record<string, CollapsedRmObject> = {};
   private applyL10n: boolean;
   private templateTerms: Record<string, TermBag> = {};
   private archetypeTerms: Record<string, TermDefinitionTable> = {};
+  /** The template being built, when it is id-coded (value codes are mapped). */
+  private opt?: openehr_am.OPERATIONAL_TEMPLATE;
   /** Primary language first, then the additional languages the caller included. */
   private selectedLanguages: string[] = [];
   private idLanguage: WebTemplateIdLanguage = "primary";
@@ -441,7 +646,9 @@ export class WebTemplateBuilder {
       bags.template,
       bags.archetype,
       meta[TERM_ARCHETYPE_SCOPE_KEY],
-    ) ?? lookupTerm(bags.template, obj.node_id);
+    ) ?? (scopedBagFor(bags.archetype, meta[TERM_ARCHETYPE_SCOPE_KEY])
+      ? undefined
+      : lookupTerm(bags.template, obj.node_id));
   }
 
   /** Term in one language. The original language also applies a fixed name. */
@@ -612,8 +819,36 @@ export class WebTemplateBuilder {
         scope,
       );
     }
+    this.mapLocalValueCodes(
+      inputs,
+      (term as TermScopeMeta | undefined)?.[TERM_ARCHETYPE_SCOPE_KEY] ??
+        (cObj as TermScopeMeta | undefined)?.[TERM_ARCHETYPE_SCOPE_KEY],
+    );
 
     return inputs;
+  }
+
+  /**
+   * id-coded templates: local value codes become their ADL 1.4 codes, by the
+   * same per-archetype map as the OPT 1.4 export and RM data (#252). A
+   * value code written back to an external code changes the terminology.
+   */
+  private mapLocalValueCodes(inputs: WebTemplateInput[], scope: string | undefined): void {
+    if (!this.opt) return;
+    for (const input of inputs) {
+      if (input.terminology && input.terminology !== "local") continue;
+      if (!input.list?.length && typeof input.defaultValue !== "string") continue;
+      let external: string | undefined;
+      const map = (code: string) => {
+        const m = adl14CodeFor(this.opt, code, scope);
+        const ext = externalCodeOf(m);
+        if (ext) external = ext.terminology;
+        return ext?.code ?? m;
+      };
+      if (input.list) input.list = input.list.map((item) => ({ ...item, value: map(item.value) }));
+      if (typeof input.defaultValue === "string") input.defaultValue = map(input.defaultValue);
+      if (external && input.terminology) input.terminology = external;
+    }
   }
 
   /** Attach OPT path annotations and promote L10n.* into localizedNames. */
@@ -640,6 +875,7 @@ export class WebTemplateBuilder {
   }
 
   build(opt: openehr_am.OPERATIONAL_TEMPLATE): WebTemplate {
+    this.collapsed = {};
     const templateId = readTemplateId(opt) ?? opt.archetype_id?.value ??
       "template.en.v1";
 
@@ -658,6 +894,7 @@ export class WebTemplateBuilder {
       TermBag
     >;
     this.archetypeTerms = scoped.archetype_term_definitions ?? {};
+    this.opt = adl2CodingSystemOf(opt) === "id-coded" ? opt : undefined;
     this.bagCache.clear();
     this.pathAnnotations = this.applyL10n ? flattenOptPathAnnotations(opt) : {};
 
@@ -674,24 +911,17 @@ export class WebTemplateBuilder {
       isComposition,
     );
 
-    const ctxNodes = isComposition && this.includeContext
-      ? this.defaultCompositionContextNodes()
-      : [];
-    const existingCtxIds = new Set(
-      (tree.children ?? []).filter((c) => c.inContext).map((c) => c.id),
-    );
-    const mergedCtx = [
-      ...ctxNodes.filter((n) => !existingCtxIds.has(n.id)),
-      ...(tree.children ?? []).filter((c) => c.inContext),
-    ];
-    const contentChildren = (tree.children ?? []).filter((c) => !c.inContext);
+    const children = isComposition && this.includeContext
+      ? this.orderCompositionChildren(tree.children ?? [])
+      : (tree.children ?? []);
 
     const fullTree: WebTemplateNode = {
       ...tree,
       id: rootId,
       rmType: opt.definition.rm_type_name ?? "COMPOSITION",
       aqlPath: "/",
-      children: [...mergedCtx, ...contentChildren],
+      children,
+      ...(Object.keys(this.collapsed).length ? { collapsed: this.collapsed } : {}),
     };
     dedupeSiblingIds(fullTree);
 
@@ -702,6 +932,199 @@ export class WebTemplateBuilder {
       languages: this.selectedLanguages,
       tree: fullTree,
     };
+  }
+
+  private buildRmAttributeLeaf(
+    obj: openehr_am.C_OBJECT,
+    aqlPath: string,
+    attrName: string,
+    attrBounds: { min: number; max: number },
+  ): WebTemplateNode {
+    const leaf = this.buildLeaf(obj, aqlPath, attrName);
+    return {
+      ...leaf,
+      ...rmAttributeIdentity(attrName),
+      min: attrBounds.min,
+      max: attrBounds.max,
+    };
+  }
+
+  private buildIsmTransitionObject(
+    obj: openehr_am.C_COMPLEX_OBJECT,
+    aqlPath: string,
+    attrBounds: { min: number; max: number },
+  ): WebTemplateNode {
+    const shell: WebTemplateNode = {
+      ...rmAttributeIdentity("ism_transition"),
+      rmType: "ISM_TRANSITION",
+      nodeId: constraintNodeId(obj),
+      min: attrBounds.min,
+      max: attrBounds.max,
+      aqlPath,
+      children: [],
+    };
+    for (const attr of obj.attributes ?? []) {
+      const attrName = attr.rm_attribute_name;
+      if (!attrName) continue;
+      const bounds = attributeExistenceBounds(attr);
+      const child = (attr as { children?: openehr_am.C_OBJECT[] }).children
+        ?.[0];
+      if (!(child instanceof openehr_am.C_COMPLEX_OBJECT)) continue;
+      if (isRmAttributeValueLeaf(child)) {
+        shell.children!.push(
+          this.buildRmAttributeLeaf(
+            child,
+            joinAqlPath(aqlPath, attrName),
+            attrName,
+            bounds,
+          ),
+        );
+      }
+    }
+    if (!shell.children?.length) delete shell.children;
+    return this.decorateWithAnnotations(shell);
+  }
+
+  private mergeIsmCodedAttribute(
+    ismObjects: openehr_am.C_COMPLEX_OBJECT[],
+    attrName: string,
+    ismAqlPath: string,
+  ): WebTemplateNode | undefined {
+    let bounds = { min: 0, max: 1 };
+    for (const ism of ismObjects) {
+      const attr = ism.attributes?.find((a) => a.rm_attribute_name === attrName);
+      if (attr) {
+        bounds = attributeExistenceBounds(attr);
+        break;
+      }
+    }
+    const dvObjects: openehr_am.C_COMPLEX_OBJECT[] = [];
+    for (const ism of ismObjects) {
+      const attr = ism.attributes?.find((a) => a.rm_attribute_name === attrName);
+      const child = (attr as { children?: openehr_am.C_OBJECT[] })?.children?.[0];
+      if (child instanceof openehr_am.C_COMPLEX_OBJECT) dvObjects.push(child);
+    }
+    if (!dvObjects.length) return undefined;
+    const leaf = this.buildRmAttributeLeaf(
+      dvObjects[0],
+      joinAqlPath(ismAqlPath, attrName),
+      attrName,
+      bounds,
+    );
+    const mergedCodes = new Map<string, WebTemplateInputListItem>();
+    for (const dv of dvObjects) {
+      const inputs = this.buildInputs(dv.rm_type_name ?? "DV_CODED_TEXT", dv);
+      for (const input of inputs) {
+        if (input.suffix && input.suffix !== "code") continue;
+        for (const item of input.list ?? []) {
+          if (item.value) mergedCodes.set(item.value, item);
+        }
+      }
+    }
+    if (mergedCodes.size) {
+      const variants = ismObjects.map((ism) => ({
+        careflowStep: singleConstrainedCode(ism, "careflow_step"),
+        currentState: singleConstrainedCode(ism, "current_state"),
+      }));
+      leaf.inputs = (leaf.inputs ?? []).map((input) => {
+        if (input.suffix && input.suffix !== "code") return input;
+        const list = [...mergedCodes.values()].map((item) => {
+          if (attrName !== "careflow_step") return item;
+          const variant = variants.find((v) => v.careflowStep === item.value);
+          if (!variant?.currentState) return item;
+          return {
+            ...item,
+            currentStates: [variant.currentState],
+          };
+        });
+        return { ...input, list };
+      });
+    }
+    if (attrName === "careflow_step" && ismObjects.length === 1) {
+      const current = singleConstrainedCode(ismObjects[0], "current_state");
+      if (current) {
+        leaf.inputs = (leaf.inputs ?? []).map((input) => {
+          if (input.suffix && input.suffix !== "code") return input;
+          return {
+            ...input,
+            list: (input.list ?? []).map((item) => ({
+              ...item,
+              currentStates: [current],
+            })),
+          };
+        });
+      }
+    }
+    return leaf;
+  }
+
+  private buildIsmTransitionAttribute(
+    attr: openehr_am.C_ATTRIBUTE,
+    parentAqlPath: string,
+    ismObjects: openehr_am.C_COMPLEX_OBJECT[],
+  ): WebTemplateNode {
+    const attrBounds = attributeExistenceBounds(attr);
+    const single = ismObjects.length === 1;
+    const first = ismObjects[0];
+    const nodeId = single ? constraintNodeId(first) : undefined;
+    const ismPath = nodeId
+      ? joinAqlPath(parentAqlPath, `ism_transition[${nodeId}]`)
+      : joinAqlPath(parentAqlPath, "ism_transition");
+
+    const shell: WebTemplateNode = {
+      ...rmAttributeIdentity("ism_transition"),
+      rmType: "ISM_TRANSITION",
+      nodeId,
+      min: attrBounds.min,
+      max: attrBounds.max,
+      aqlPath: ismPath,
+      children: [],
+    };
+
+    for (const attrName of ["current_state", "transition", "careflow_step"]) {
+      const child = single
+        ? (() => {
+          const a = first.attributes?.find((x) => x.rm_attribute_name === attrName);
+          const c = (a as { children?: openehr_am.C_OBJECT[] })?.children?.[0];
+          if (!(c instanceof openehr_am.C_COMPLEX_OBJECT)) return undefined;
+          if (!isRmAttributeValueLeaf(c)) return undefined;
+          const bounds = attributeExistenceBounds(a!);
+          const leaf = this.buildRmAttributeLeaf(
+            c,
+            joinAqlPath(ismPath, attrName),
+            attrName,
+            bounds,
+          );
+          if (attrName === "careflow_step") {
+            const current = singleConstrainedCode(first, "current_state");
+            if (current && leaf.inputs) {
+              for (const input of leaf.inputs) {
+                if (input.suffix && input.suffix !== "code") continue;
+                input.list = (input.list ?? []).map((item) => ({
+                  ...item,
+                  currentStates: [current],
+                }));
+              }
+            }
+          }
+          return leaf;
+        })()
+        : this.mergeIsmCodedAttribute(ismObjects, attrName, ismPath);
+      if (child) shell.children!.push(child);
+    }
+
+    if (!shell.children?.length) delete shell.children;
+    if (ismObjects.length > 1) {
+      shell.annotations = {
+        ...(shell.annotations ?? {}),
+        ismVariants: ismObjects.map((ism) => ({
+          nodeId: constraintNodeId(ism),
+          currentState: singleConstrainedCode(ism, "current_state"),
+          careflowStep: singleConstrainedCode(ism, "careflow_step"),
+        })),
+      };
+    }
+    return this.decorateWithAnnotations(shell);
   }
 
   private buildFromComplex(
@@ -742,12 +1165,29 @@ export class WebTemplateBuilder {
       if (
         isCompositionRoot && this.includeContext && CONTEXT_ATTRS.has(attrName)
       ) {
-        node.children!.push(...this.buildContextNodes(attr));
+        const ctxNode = this.buildCompositionAttributeNode(attr);
+        if (ctxNode) node.children!.push(ctxNode);
         continue;
       }
 
       const children =
         (attr as { children?: openehr_am.C_OBJECT[] }).children ?? [];
+
+      if (attrName === "ism_transition") {
+        const ismObjects = children.filter(
+          (c): c is openehr_am.C_COMPLEX_OBJECT =>
+            c instanceof openehr_am.C_COMPLEX_OBJECT &&
+            c.rm_type_name === "ISM_TRANSITION",
+        );
+        if (ismObjects.length) {
+          node.children!.push(
+            this.buildIsmTransitionAttribute(attr, aqlPath, ismObjects),
+          );
+          continue;
+        }
+      }
+
+      const attrBounds = attributeExistenceBounds(attr);
 
       for (const child of children) {
         const childId = childPathPredicate(child, children);
@@ -755,15 +1195,22 @@ export class WebTemplateBuilder {
           aqlPath,
           childId ? `${attrName}[${childId}]` : attrName,
         );
-        const childLabel = child.rm_type_name?.toLowerCase() ?? attrName;
+        const childLabel = webTemplateChildIdHint(rmType, attrName, child);
         if (
           child instanceof openehr_am.C_COMPLEX_OBJECT ||
           child instanceof openehr_am.ARCHETYPE_SLOT
         ) {
-          const complex = child instanceof openehr_am.ARCHETYPE_SLOT
+          const complex = child instanceof openehr_am.C_COMPLEX_OBJECT
+            ? child
+            : child instanceof openehr_am.ARCHETYPE_SLOT
             ? complexShellFromSlot(child)
-            : child;
-          if (SKIP_RM_TYPES.has(complex.rm_type_name ?? "")) {
+            : undefined;
+          if (!complex) continue;
+          if (useRmAttributeAsWebTemplateId(rmType, attrName, complex)) {
+            node.children!.push(
+              this.buildRmAttributeLeaf(complex, childPath, attrName, attrBounds),
+            );
+          } else if (SKIP_RM_TYPES.has(complex.rm_type_name ?? "")) {
             const flattened = this.flattenDataStructure(
               complex,
               childPath,
@@ -771,17 +1218,34 @@ export class WebTemplateBuilder {
             );
             node.children!.push(...flattened.children ?? []);
           } else if (complex.rm_type_name === "HISTORY") {
-            node.children!.push(
-              this.flattenHistory(
-                complex,
-                childPath,
-                nodeShell(node, {
-                  id: normalizeWebTemplateId(attrName),
-                  rmType: "HISTORY",
-                  aqlPath: childPath,
-                }),
-              ),
+            // Spec "Level Removal": HISTORY is always collapsed; an EVENT is
+            // collapsed too when it is the only event node and max = 1.
+            const history = this.flattenHistory(
+              complex,
+              childPath,
+              nodeShell(node, {
+                id: normalizeWebTemplateId(attrName),
+                rmType: "HISTORY",
+                aqlPath: childPath,
+              }),
             );
+            this.registerCollapsed(complex, childPath, "HISTORY");
+            const events = history.children ?? [];
+            if (events.length === 1 && events[0].max === 1) {
+              this.registerCollapsed(events[0], events[0].aqlPath, events[0].rmType);
+              node.children!.push(...events[0].children ?? []);
+            } else {
+              node.children!.push(...events);
+            }
+            if (this.includeContext) {
+              node.children!.push(
+                rmContextNode(
+                  "history_origin",
+                  "DV_DATE_TIME",
+                  joinAqlPath(childPath, "origin"),
+                ),
+              );
+            }
           } else if (complex.rm_type_name === "ELEMENT") {
             node.children!.push(
               this.buildElement(
@@ -790,6 +1254,10 @@ export class WebTemplateBuilder {
                 this.elementShell(complex, childPath),
               ),
             );
+          } else if (complex.rm_type_name === "ISM_TRANSITION") {
+            node.children!.push(
+              this.buildIsmTransitionObject(complex, childPath, attrBounds),
+            );
           } else {
             node.children!.push(this.buildFromComplex(
               complex,
@@ -797,14 +1265,78 @@ export class WebTemplateBuilder {
               childLabel,
             ));
           }
+        } else if (
+          isDataValueType(child.rm_type_name ?? "") &&
+          useRmAttributeAsWebTemplateId(rmType, attrName, child)
+        ) {
+          node.children!.push(
+            this.buildRmAttributeLeaf(child, childPath, attrName, attrBounds),
+          );
         } else if (isDataValueType(child.rm_type_name ?? "")) {
           node.children!.push(this.buildLeaf(child, childPath, childLabel));
         }
       }
     }
 
+    if (this.includeContext) this.appendRmContextNodes(node, obj);
+
     if (!node.children?.length) delete node.children;
     return this.decorateWithAnnotations(node);
+  }
+
+  /** RM-mandatory attributes of entries and activities as `inContext` nodes. */
+  private appendRmContextNodes(node: WebTemplateNode, obj?: openehr_am.C_COMPLEX_OBJECT): void {
+    const path = node.aqlPath;
+    const extra: WebTemplateNode[] = [];
+    if (node.rmType === "ACTION") {
+      extra.push(rmContextNode("time", "DV_DATE_TIME", joinAqlPath(path, "time")));
+    }
+    if (node.rmType === "INSTRUCTION") {
+      extra.push(rmContextNode("narrative", "DV_TEXT", joinAqlPath(path, "narrative")));
+    }
+    if (node.rmType === "ACTIVITY") {
+      extra.push(
+        rmContextNode("timing", "DV_PARSABLE", joinAqlPath(path, "timing"), undefined, 0),
+        rmContextNode(
+          "action_archetype_id",
+          "STRING",
+          joinAqlPath(path, "action_archetype_id"),
+          [actionArchetypeIdInput(obj)],
+        ),
+      );
+    }
+    if (
+      node.rmType === "ACTION" &&
+      !node.children?.some((c) => c.id === "ism_transition")
+    ) {
+      extra.push(defaultIsmTransitionNode(joinAqlPath(path, "ism_transition")));
+    }
+    if (ENTRY_RM_TYPES.has(node.rmType)) {
+      extra.push(
+        rmContextNode("language", "CODE_PHRASE", joinAqlPath(path, "language")),
+        rmContextNode("encoding", "CODE_PHRASE", joinAqlPath(path, "encoding")),
+        rmContextNode("subject", "PARTY_PROXY", joinAqlPath(path, "subject")),
+      );
+    }
+    if (extra.length) appendMissing(node, extra);
+  }
+
+  /** Record an RM object that gets no Web Template node of its own. */
+  private registerCollapsed(
+    obj: openehr_am.C_OBJECT | WebTemplateNode,
+    aqlPath: string,
+    rmType: string,
+  ): void {
+    const terms = "aqlPath" in obj
+      ? { name: obj.name, localizedNames: obj.localizedNames }
+      : this.termFields(obj, rmType.toLowerCase(), false);
+    this.collapsed[aqlPath] = {
+      rmType,
+      ...(terms.name ? { name: terms.name } : {}),
+      ...(terms.localizedNames && Object.keys(terms.localizedNames).length
+        ? { localizedNames: terms.localizedNames }
+        : {}),
+    };
   }
 
   private flattenDataStructure(
@@ -812,6 +1344,9 @@ export class WebTemplateBuilder {
     aqlPath: string,
     parent: WebTemplateNode,
   ): WebTemplateNode {
+    if (obj.rm_type_name?.startsWith("ITEM_")) {
+      this.registerCollapsed(obj, aqlPath, obj.rm_type_name);
+    }
     const out: WebTemplateNode[] = [];
     for (const attr of obj.attributes ?? []) {
       const attrName = attr.rm_attribute_name;
@@ -824,7 +1359,8 @@ export class WebTemplateBuilder {
           aqlPath,
           childId ? `${attrName}[${childId}]` : attrName,
         );
-        const itemLabel = attrName;
+        const parentRm = obj.rm_type_name ?? "";
+        const itemLabel = webTemplateChildIdHint(parentRm, attrName, child);
         const complex = child instanceof openehr_am.ARCHETYPE_SLOT
           ? complexShellFromSlot(child)
           : child instanceof openehr_am.C_COMPLEX_OBJECT
@@ -866,7 +1402,7 @@ export class WebTemplateBuilder {
       if (!(ev instanceof openehr_am.C_COMPLEX_OBJECT)) continue;
       const evPath = joinAqlPath(
         aqlPath,
-        `events[${nodeIdToAtCode(ev.node_id)}]`,
+        pathSegment("events", constraintNodeId(ev)),
       );
       const { min, max } = multiplicityBounds(ev.occurrences);
       const eventShell: WebTemplateNode = this.decorateWithAnnotations({
@@ -888,10 +1424,21 @@ export class WebTemplateBuilder {
         if (!(child instanceof openehr_am.C_COMPLEX_OBJECT)) continue;
         const flattened = this.flattenDataStructure(
           child,
-          joinAqlPath(evPath, `${attrName}[${nodeIdToAtCode(child.node_id)}]`),
+          joinAqlPath(evPath, pathSegment(attrName, constraintNodeId(child))),
           eventShell,
         );
         eventChildren.push(...flattened.children ?? []);
+      }
+      if (this.includeContext) {
+        const ctx = [rmContextNode("time", "DV_DATE_TIME", joinAqlPath(evPath, "time"))];
+        if (ev.rm_type_name === "INTERVAL_EVENT") {
+          ctx.push(
+            rmContextNode("width", "DV_DURATION", joinAqlPath(evPath, "width")),
+            rmContextNode("math_function", "DV_CODED_TEXT", joinAqlPath(evPath, "math_function")),
+          );
+        }
+        const ids = new Set(eventChildren.map((c) => c.id));
+        eventChildren.push(...ctx.filter((c) => !ids.has(c.id)));
       }
       eventNodes.push(
         nodeShell(eventShell, {
@@ -937,13 +1484,16 @@ export class WebTemplateBuilder {
       ?.children?.[0];
     if (valueChild) {
       const leaf = this.buildLeaf(valueChild, aqlPath, shell.id);
-      // The value constraint usually has no node id of its own; keep the
-      // ELEMENT's at-code so instances can be matched/rebuilt correctly.
-      const elementNodeId = nodeIdToAtCode(obj.node_id);
+      // Data values are not LOCATABLE and have no node id in the Web
+      // Template; keep the ELEMENT's at-code so instances can be
+      // matched/rebuilt correctly.
+      const elementNodeId = constraintNodeId(obj);
       if (!leaf.nodeId && elementNodeId) {
         leaf.nodeId = elementNodeId;
         const fields = this.termFields(obj, shell.id);
-        if (fields.localizedName && !leaf.localizedName) {
+        // An ADL2 value constraint has a node id but no term of its own: a
+        // term found for it belongs to another node, so the ELEMENT's wins.
+        if (fields.localizedName && (!leaf.localizedName || valueChild.node_id)) {
           leaf.name = fields.name;
           leaf.localizedName = fields.localizedName;
           leaf.id = fields.id;
@@ -964,7 +1514,11 @@ export class WebTemplateBuilder {
     idHint: string,
   ): WebTemplateNode {
     const rmType = obj.rm_type_name ?? "DV_TEXT";
-    const { min, max } = multiplicityBounds(obj.occurrences);
+    // ADL2 primitive constraints carry no occurrences; like the OPT 1.4
+    // C_CODE_PHRASE / C_PRIMITIVE_OBJECT they stand for exactly one value.
+    const { min, max } = !obj.occurrences && obj instanceof openehr_am.C_PRIMITIVE_OBJECT
+      ? { min: 1, max: 1 }
+      : multiplicityBounds(obj.occurrences);
     return this.decorateWithAnnotations({
       ...this.termFields(obj, idHint),
       rmType,
@@ -976,79 +1530,84 @@ export class WebTemplateBuilder {
     });
   }
 
-  private defaultCompositionContextNodes(): WebTemplateNode[] {
+  /**
+   * Composition children in Better/EHRbase order: `category`, `context`,
+   * content, then `composer`, `language`, `territory`. Missing RM-mandatory
+   * nodes are added as `inContext` nodes.
+   */
+  private orderCompositionChildren(children: WebTemplateNode[]): WebTemplateNode[] {
+    const byId = (id: string) =>
+      children.find((c) => c.id === id && (c.inContext || c.rmType === "EVENT_CONTEXT"));
+    const category = byId("category") ??
+      rmContextNode("category", "DV_CODED_TEXT", "/category");
+    const context = children.find((c) => c.rmType === "EVENT_CONTEXT" && c.aqlPath === "/context") ??
+      this.buildEventContextNode(undefined, { min: 0, max: 1 });
+    const special = new Set([category, context]);
+    const content = children.filter((c) => !special.has(c));
     return [
-      {
-        id: "language",
-        rmType: "CODE_PHRASE",
-        min: 1,
-        max: 1,
-        aqlPath: "/language",
-        inContext: true,
-        inputs: [{ type: "TEXT" }],
-      },
-      {
-        id: "territory",
-        rmType: "CODE_PHRASE",
-        min: 1,
-        max: 1,
-        aqlPath: "/territory",
-        inContext: true,
-        inputs: [{ type: "TEXT" }],
-      },
-      {
-        id: "composer_name",
-        rmType: "DV_TEXT",
-        min: 0,
-        max: 1,
-        aqlPath: "/composer",
-        inContext: true,
-        inputs: [{ type: "TEXT" }],
-      },
-      {
-        id: "time",
-        rmType: "DV_DATE_TIME",
-        min: 0,
-        max: 1,
-        aqlPath: "/context/start_time",
-        inContext: true,
-        inputs: [{ type: "DATETIME" }],
-      },
+      category,
+      context,
+      ...content,
+      rmContextNode("composer", "PARTY_PROXY", "/composer"),
+      rmContextNode("language", "CODE_PHRASE", "/language"),
+      rmContextNode("territory", "CODE_PHRASE", "/territory"),
     ];
   }
 
-  private buildContextNodes(attr: openehr_am.C_ATTRIBUTE): WebTemplateNode[] {
-    const name = attr.rm_attribute_name ?? "context";
+  /** Node for a constrained COMPOSITION attribute (category, context). */
+  private buildCompositionAttributeNode(
+    attr: openehr_am.C_ATTRIBUTE,
+  ): WebTemplateNode | undefined {
+    const name = attr.rm_attribute_name ?? "";
     const child = attr.children?.[0];
-    const rmType = child?.rm_type_name ?? name.toUpperCase();
-
-    if (name === "context" && child instanceof openehr_am.C_COMPLEX_OBJECT) {
-      const nodes: WebTemplateNode[] = [];
-      for (const ctxAttr of child.attributes ?? []) {
-        const ctxName = ctxAttr.rm_attribute_name;
-        if (!ctxName) continue;
-        nodes.push({
-          id: ctxName,
-          rmType: "DV_TEXT",
-          min: 0,
-          max: 1,
-          aqlPath: `/context/${ctxName}`,
-          inContext: true,
-          inputs: [{ type: "TEXT" }],
-        });
-      }
-      return nodes;
+    if (name === "context") {
+      return this.buildEventContextNode(
+        child instanceof openehr_am.C_COMPLEX_OBJECT ? child : undefined,
+        attributeExistenceBounds(attr),
+      );
     }
+    if (name === "category") {
+      const rmType = child?.rm_type_name ?? "DV_CODED_TEXT";
+      return rmContextNode("category", rmType, "/category", this.buildInputs(rmType, child));
+    }
+    // composer, language, territory: added in orderCompositionChildren.
+    return undefined;
+  }
 
-    return [{
-      id: name,
-      rmType,
-      min: 1,
+  /**
+   * EVENT_CONTEXT node: `start_time` and `setting` as `inContext` nodes, and
+   * the `other_context` content flattened like any item structure.
+   */
+  private buildEventContextNode(
+    obj: openehr_am.C_COMPLEX_OBJECT | undefined,
+    bounds: { min: number; max: number },
+  ): WebTemplateNode {
+    const node: WebTemplateNode = {
+      id: "context",
+      name: "Context",
+      rmType: "EVENT_CONTEXT",
+      min: bounds.min,
       max: 1,
-      aqlPath: `/${name}`,
-      inContext: true,
-      inputs: this.buildInputs(rmType, child),
-    }];
+      aqlPath: "/context",
+      children: [],
+    };
+    const startTime = rmContextNode("start_time", "DV_DATE_TIME", "/context/start_time");
+    const setting = rmContextNode("setting", "DV_CODED_TEXT", "/context/setting");
+    const content: WebTemplateNode[] = [];
+    for (const attr of obj?.attributes ?? []) {
+      const name = attr.rm_attribute_name;
+      const child = (attr as { children?: openehr_am.C_OBJECT[] }).children?.[0];
+      if (name === "other_context" && child instanceof openehr_am.C_COMPLEX_OBJECT) {
+        const id = constraintNodeId(child);
+        const path = joinAqlPath("/context", id ? `other_context[${id}]` : "other_context");
+        content.push(...this.flattenDataStructure(child, path, node).children ?? []);
+      } else if (name === "setting" && child) {
+        const inputs = this.buildInputs(child.rm_type_name ?? "DV_CODED_TEXT", child);
+        if (inputs.some((i) => i.list?.length)) setting.inputs = inputs;
+      }
+    }
+    node.children = [...content, startTime, setting];
+    return node;
   }
 }
 

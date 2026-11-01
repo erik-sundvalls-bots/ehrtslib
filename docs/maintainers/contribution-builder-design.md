@@ -5,7 +5,8 @@ Delivery order is in the [roadmap](roadmap.md). Decisions and their reasons
 are recorded as ADRs [0002](../adr/0002-cb-core-model-and-scope.md) to
 [0010](../adr/0010-cb-commit-envelope-and-provenance.md), plus the optional GraphQL
 API in [ADR 0011](../adr/0011-cb-optional-graphql-api.md) and the add-on packages in
-[ADR 0012](../adr/0012-cb-add-on-packages-and-patch-formats.md).
+[ADR 0012](../adr/0012-cb-add-on-packages-and-patch-formats.md), and the htmx add-on in
+[ADR 0014](../adr/0014-cb-htmx-add-on-and-editable-zipehr-html5.md).
 
 ## 1. Product
 
@@ -21,10 +22,10 @@ The idea comes from Sundvall et al., *Applying representational state
 transfer (REST) architecture to archetype-based electronic health record
 systems*, BMC Medical Informatics and Decision Making 13:57 (2013),
 <https://link.springer.com/article/10.1186/1472-6947-13-57>. Table 2 of that
-paper lists contribution-build operations. The CB keeps them as its public
+paper lists contribution-build operations. The Contribution Builder keeps them as its public
 verbs:
 
-| Paper verb | CB meaning |
+| Paper verb | Contribution Builder meaning |
 | --- | --- |
 | new build | Start an empty contribution build for one EHR (or demographic store). |
 | update-version | Add a new version of an existing versioned object, starting from its latest committed version. |
@@ -41,7 +42,7 @@ verbs:
   send whole, valid contributions instead of hand-assembling JSON.
 - **Clinicians** who use those apps, indirectly: they get drafts that
   survive reloads, live validation next to the field, and (in the
-  multi-user flavour) shared editing of one note by several people or
+  multi-caller flavour) shared editing of one note by several people or
   devices.
 - **Integrators and server-side services** (including the planned ehrtslib
   CDR proxy) that need to batch several versions into one atomic commit.
@@ -56,13 +57,58 @@ verbs:
 3. A user saves an unfinished note as `incomplete` (lifecycle 553) and
    another user completes it later.
 4. Between opening and committing, someone else commits a newer version.
-   The CB detects the conflict and returns it as data for a resolver UI
+   The Contribution Builder detects the conflict and returns it as data for a resolver UI
    instead of overwriting.
 5. One contribution changes a composition, a folder and the `EHR_STATUS`
    together, or a demographic `PARTY` and its relationships.
 6. An auditor replays the editing session that led to a commit.
 
-### 1.4 Why
+### 1.4 Single caller and multi-caller
+
+A **caller** is one app instance or device writing to the build; one person
+on two devices is multi-caller. There is one builder and one operation
+format for both cases. Only the sync layer differs
+([ADR 0002](../adr/0002-cb-core-model-and-scope.md)).
+
+**What a single caller gets.** A single caller (one web app, one server
+request, one device) needs no CRDT library and still gets:
+
+| Feature | What it gives | Status |
+| --- | --- | --- |
+| One append-only operation log | Every change is an operation with author, timestamp, replica and target node uid ([ADR 0004](../adr/0004-cb-operation-log-and-sync.md)). | Implemented |
+| Deterministic replay | The same log and template give the same RM JSON, so the editing session can be played back. | Implemented |
+| History replay and copy forward | Nothing is erased. A caller can replay the log to see the draft as it was after any operation, and copy a value or text block from that earlier state into the current one as a new `set-value` ([ADR 0004](../adr/0004-cb-operation-log-and-sync.md)). | Replay implemented; a replay-to-point API and copy-forward provenance are not in the code yet |
+| Kept discarded drafts | A `discard` is an operation; the log is the record of drafts that never reach the CDR. | Implemented (`discard`; commit refuses the draft) |
+| Tamper-evident audit trail | Each commit's `AUDIT_DETAILS.description` carries `oplog sha256:<hex>` and, optionally, a link to the log ([ADR 0010](../adr/0010-cb-commit-envelope-and-provenance.md)). | Implemented |
+| Optional append-only log sink | The deployment can stream the log to a server as work happens ([ADR 0005](../adr/0005-cb-storage-encryption-policy-neutrality.md)). | Designed, not in the code yet |
+| Conflict detection against the CDR | Other systems can write to the same EHR, so an update commit carries `preceding_version_uid`; on failure the builder re-reads, replays the log and returns conflicts as data ([ADR 0009](../adr/0009-cb-conflicts-and-rebase.md)). Costs nothing unless a commit fails. | Implemented. `rebase` applies resolutions and retries with the new base (#177). |
+
+The Contribution Builder has no undo and never rewinds the log or restores a
+whole earlier state. What a UI does before it calls the builder, such as
+in-field undo, is the UI's business.
+
+The hash plus the log sink give a trail that is good for catching
+fraudulent edits. It is **not** non-repudiation: authors in the log are
+whatever the caller passes in, and operations are not signed. That needs
+signatures, for example the optional `signature` and `attestations` on
+`UPDATE_VERSION`. Encryption at rest and retention are the deployment's
+choice ([ADR 0005](../adr/0005-cb-storage-encryption-policy-neutrality.md)).
+
+**What multi-caller adds.** Several callers (people, or one person on
+several devices) edit the same draft. On top of everything above it adds
+the following. The Automerge 3 adapter is an optional add-on
+(`addons/cb_automerge/mod.ts`,
+[#170](https://github.com/ErikSundvall/ehrtslib/issues/170)). Presence is
+not in that adapter.
+
+| Feature | What it adds |
+| --- | --- |
+| CRDT sync | The same operations are synced through Automerge 3 ([ADR 0013](../adr/0013-cb-crdt-library-and-apply-policy.md)); the Automerge WASM is an opt-in download. |
+| Concurrent apply policy | Rules for replaying merged operations without throwing, and for surfacing skips ([ADR 0013](../adr/0013-cb-crdt-library-and-apply-policy.md)). |
+| Presence | Who edits where, ephemeral and not logged. |
+| Text sync levels and the base `rev` check | A `set-value` or `edit-text` with a stale `rev` is not applied, so nobody silently overwrites someone else's free text. `rev` is optional for a single caller ([#243](https://github.com/ErikSundvall/ehrtslib/issues/243)). |
+
+### 1.5 Why
 
 openEHR REST lets clients send whole contributions, but today every app
 re-implements draft handling, uid assignment, validation, attribution and
@@ -78,13 +124,13 @@ versioned type). The operation log, the uid scheme and the commit envelope are g
 over `VERSION<T>`. The implementation ships **COMPOSITION first**; the other
 types follow without format changes ([ADR 0002](../adr/0002-cb-core-model-and-scope.md)).
 
-Two flavours share one core:
+Two flavours share one core (see section 1.4):
 
-- **Single-app**: one process (for example one web app or one server
+- **Single caller**: one caller (for example one web app or one server
   request) edits the draft. Operations are applied directly.
-- **Multi-user / multi-device**: operations are synchronised through a CRDT
-  so several users or devices edit the same draft, with presence, per-value
-  author colouring and session playback.
+- **Multi-caller**: operations are synchronised through a CRDT so several
+  people or devices edit the same draft, with presence and per-value
+  author colouring.
 
 Out of scope here: the merge-conflict resolver UI (separate project, see
 roadmap) and formal openEHR specification proposals (see section 11).
@@ -105,13 +151,13 @@ roadmap) and formal openEHR specification proposals (see section 11).
   └───────────────────────────────────────────────────────┘
         │ apply ops                     │ build
         ▼                               ▼
-  single-app adapter        NewContribution  → CDR (REST)
+  single-caller adapter     NewContribution  → CDR (REST)
   CRDT sync adapter  ◄──►   other replicas (ops as CRDT changes)
   storage adapter    ──►    caller-chosen storage (drafts, log bytes)
 ```
 
-- **One core model**, `ContributionBuild`, with adapters for single-app
-  and CRDT use.
+- **One core model**, `ContributionBuild`, with adapters for single-caller
+  and CRDT (multi-caller) use.
 - **Commit shapes follow the REST ITS** `NewContribution` request body,
   with `UPDATE_VERSION` and `UPDATE_AUDIT` (field list in ADR 0010). Version `data` is always real RM
   objects from ehrtslib's RM classes.
@@ -163,7 +209,7 @@ Summary of [ADR 0003](../adr/0003-cb-identity-and-uids.md):
 Summary of [ADR 0004](../adr/0004-cb-operation-log-and-sync.md):
 
 - **Every change goes through one append-only operation log**, also in the
-  single-app flavour. Initial operations: `set-value`, `add-instance`,
+  single-caller flavour. Initial operations: `set-value`, `add-instance`,
   `remove-instance`, `move-instance`, `assign-uid`, `set-composer`,
   `set-participation`, `set-lifecycle`, `bind-template`,
   `migrate-template`, `import` (adapter input recorded as operations) and
@@ -174,7 +220,7 @@ Summary of [ADR 0004](../adr/0004-cb-operation-log-and-sync.md):
 - Each operation records author, timestamp and replica, and **targets a
   node uid, not a path**. Paths are derived for display and for fallback
   matching only.
-- Single-app applies operations directly. Multi-user sends the same
+- A single caller applies operations directly. Multi-caller sends the same
   operations through a CRDT.
 - **Session playback is replay of the log.** Any implementation must be
   able to recreate the session from the log alone (plus the bound
@@ -208,7 +254,9 @@ Summary of [ADR 0007](../adr/0007-cb-template-binding.md):
   both absent (ADR 0007, 0010).
 - ADL 1.4 sources: ehrtslib converts ADL 1.4 **archetype** text to ADL2
   (`parser/adl14_to_adl2_converter.ts`), and a legacy OPT 1.4 XML to an ADL2
-  operational template with id-codes (`parser.upconvertOpt14ToAdl2`, #163).
+  operational template (`parser.upconvertOpt14ToAdl2`, #163). Both use
+  ADL 2.4 at-codes by default; `adl2CodingSystem: "id-coded"` gives
+  ADL 2.0–2.3 id-codes (#181, ADR 0015).
   The hash rule and code mapping are described in ADR 0007, section
   "Implementation".
 
@@ -225,8 +273,9 @@ Summary of [ADR 0008](../adr/0008-cb-validation-and-lifecycle.md):
   must be valid. Incomplete mode lists the missing required fields.
 - CDR behaviour differs today: EHRbase 2.36 rejects an incomplete version
   that misses mandatory content (ehrbase#1630); FerroEHR accepts it.
-- Phase 1 (#165): `contributionBuilder.DraftValidator` runs the full check on
-  request; see ADR 0008, section "Implementation".
+- Phase 1 (#165): `DraftValidator` runs the full check on request.
+  #173 adds the quick check after each operation and the per-CDR incomplete
+  profile; see ADR 0008, section "Implementation".
 
 ## 9. Attribution, conflicts, storage and commit
 
@@ -236,7 +285,7 @@ Summary of [ADR 0008](../adr/0008-cb-validation-and-lifecycle.md):
   source; `COMPOSITION.composer` is an explicit build field set before or at
   commit; the committer is separate. Per-value author colouring comes only
   from the log, never from RM data.
-- **Conflicts** ([ADR 0009](../adr/0009-cb-conflicts-and-rebase.md)): the CB
+- **Conflicts** ([ADR 0009](../adr/0009-cb-conflicts-and-rebase.md)): the Contribution Builder
   never overwrites. On any failed commit it re-reads the latest version of
   each modified object; if that is no longer the draft's base
   (`preceding_version_uid`), it is a conflict, whatever the status code. It
@@ -282,11 +331,11 @@ Summary of [ADR 0008](../adr/0008-cb-validation-and-lifecycle.md):
 Drafts marked `discard` are left out of step 5 (see 9.2).
 
 Phase 1 (#166) implements steps 1–5 for new COMPOSITIONs
-(`contributionBuilder.prepareContribution`, `ItsRestContributionAdapter`);
+(`prepareContribution`, `ItsRestContributionAdapter`);
 see ADR 0010, section "Implementation". #167 adds `update-version`,
 `copy-version`, the commit record of step 6, and conflict detection with
-conflict data (ADR 0009, section "Implementation"); resolutions and retry
-come later (#177).
+conflict data. #177 adds resolutions and rebase onto the latest version
+(ADR 0009). A committed draft is not continued in place.
 
 ### 9.2 Discarded drafts
 
@@ -301,7 +350,7 @@ Discarded drafts are **not committed to the CDR**.
 - A build in which everything is discarded never commits, so there is no
   contribution audit to carry the link. The optional append-only log sink
   (configured by the deployment, see ADR 0005) is how such logs reach
-  durable storage. In the multi-user flavour the log is synchronised to the
+  durable storage. In the multi-caller flavour the log is synchronised to the
   other replicas anyway.
 - Rejected alternative: committing discarded drafts to the CDR as
   `incomplete` and then `abandoned` (`801`), the RM-conformant two-version
@@ -319,14 +368,41 @@ for review:
 - It ships as a separate add-on release file (for example
   `ehrtslib-<version>-cb-graphql.min.js`), not in `mod.ts` or the main
   bundles, so users who don't need GraphQL don't carry it.
-- It covers uncommitted CB content only. Committed EHR data stays with AQL
+- It covers uncommitted Contribution Builder content only. Committed EHR data stays with AQL
   and REST.
-- A node is addressed by `uid`, or by a path whose steps can mix ADL2
-  codes, node names in a chosen ISO `lang` (default `lang.1`), **any
-  template annotation** (`@key=value`), symbols (`$name`, shorthand for
-  `a.id` or `am.symbol_binding`) and 0-based indexes. Annotation values
-  need not be unique: a path that matches several nodes is narrowed by
-  adding prefix steps.
+- A node is addressed by `uid`, or by a path whose steps can mix node
+  codes (at-codes or id-codes), node names in a chosen ISO `lang` (default
+  `lang.1`), **any template annotation** (`@key=value`), symbols
+  (`$name`, shorthand for `a.id` or `am.symbol_binding`) and 0-based
+  indexes. Annotation values need not be unique: a path that matches
+  several nodes is narrowed by adding prefix steps.
+
+  Examples use `test_data/opt14/simple-diagnose-and-vitals.opt` (Simple
+  vitals, en/sv/de), whose annotations are `ui.section = vitals` on the five
+  vital signs observations, `am.symbol_binding` `pulse` and `bp`, and `a.id`
+  `systolic` and `rate` (on both Respiration and Pulse). The strings use the
+  shorthand form; typed steps are canonical, and escaping of `/` and `=` is
+  still open ([ADR 0011](../adr/0011-cb-optional-graphql-api.md) question 3).
+  ADL 2.4 (AM 2.4.0, not yet released) brings back the ADL 1.4 at-code system for nodes and requires it
+  for openEHR RM systems, with id-codes left for other models
+  ([ADL2, coding systems](https://specifications.openehr.org/releases/AM/development/ADL2.html#_node_identifier_and_coding_systems),
+  [SPECAM-90](https://openehr.atlassian.net/browse/SPECAM-90)); the resolver
+  accepts both.
+
+  | Style | Example | Resolves to |
+  | --- | --- | --- |
+  | uid | `<uuid>::a3.17` | that one node instance |
+  | Node codes, at-code style | `openEHR-EHR-OBSERVATION.blood_pressure.v2/data[at0001]/events[at0006]/data[at0003]/items[at0004]` | Systolic in every event |
+  | Node codes, id-code style (older ADL2) | `openEHR-EHR-OBSERVATION.blood_pressure.v2/data[id2]/events[id7]/data[id4]/items[id5]` | the same |
+  | Names, default `lang.1` (en) | `Blood pressure/Any event/Systolic` | the same |
+  | Names, `lang=sv` | `Blodtryck/Ospecificerad händelse/Systoliskt` | the same |
+  | Annotation | `@ui.section=vitals` | the five observations |
+  | Symbol (`a.id`) | `$systolic` | Systolic in every event |
+  | Symbol (`am.symbol_binding`) | `$bp` | the Blood pressure observation |
+  | 0-based index | `Blood pressure/Any event:1/Systolic` | Systolic in the second event |
+  | Mixed | `$bp/Any event:0/data[at0003]/items[at0004]` | Systolic in the first event |
+  | Ambiguous | `$rate` | Rate in Respiration and in Pulse; a mutation fails and lists both |
+  | Narrowed | `$pulse/$rate` or `Respiration/$rate` | only the Pulse rate, or only the Respiration rate |
 - Every address resolves to uids, and every mutation becomes ordinary
   operations in the log, with the author taken from the request context.
   An ambiguous or empty address in a mutation is an error that lists the
@@ -406,6 +482,26 @@ still open for review:
 - A future htmx add-on turns form posts into operations and returns
   updated HTML fragments with validation messages.
 
+### 9.5 htmx add-on and editable ZipEHR HTML5
+
+Summary of [ADR 0014](../adr/0014-cb-htmx-add-on-and-editable-zipehr-html5.md),
+still open for review:
+
+- The htmx add-on (`ehrtslib-<version>-cb-htmx.min.js`) renders a draft as
+  `zipehr.html5-hx`: the full and short ZipEHR HTML5 dialects plus a control
+  layer (`hx-*` and `data-cb-*` attributes, `<cb-ctl>` elements). Removing
+  the layer gives plain `zipehr.html5` with the same canonical JSON.
+- Each dialect has a `forms` profile (no JavaScript) and an `htmx` profile,
+  a 2×2 matrix. An optional render-only `basic` output serves old phones
+  and browsers.
+- Controls are real form posts with an `op` field, so htmx and no-JS forms
+  send the same request. A Fetch-API handler turns them into ordinary
+  operations on short keys or ADR 0011 addresses and returns HTML
+  fragments with validation messages.
+- The handler runs in a service worker, a local or app server, or the CDR
+  proxy. The variant and request contract are sync-technology neutral;
+  ehrtslib's multi-caller flavour uses Automerge 3 behind them.
+
 ## 10. Testing
 
 Development setup on the maintainer box (not needed for unit tests):
@@ -482,7 +578,8 @@ openEHR specification sources (RM = Reference Model, CNF = Conformance).
   (EHR Compositions, Demographic Parties etc) cannot be saved locally on
   the client machine, as this represents a security risk". They must be
   persisted on the server, in the EHR or in a secure "holding area".
-- Offline and multi-device drafting needs local persistence. The builder
+- Offline and multi-caller drafting (for example one person on several
+  devices) needs local persistence. The builder
   keeps it pluggable, off by default and encrypted at rest when on; the
   optional server log sink matches the "holding area" idea.
 - Possible later clarification: phrase the sentence as a security

@@ -12,6 +12,8 @@ export type {
 } from "./types.ts";
 
 export {
+  type AqlPathSegment,
+  aqlPathSegments,
   joinAqlPath,
   nodeIdToAtCode,
   normalizeWebTemplateId,
@@ -32,13 +34,27 @@ export {
   serializeToFlatJson,
 } from "./flat_serializer.ts";
 
+export { type SimplifiedFlavor } from "./flavor.ts";
+
 export {
   deserializeFromFlat,
   deserializeFromFlatJson,
+  deserializeFromFlatWithIssues,
+  type CodedTextDisplayValue,
+  type CodedTextMismatch,
+  CodedTextMismatchError,
+  type FlatDeserializeOptions,
   FlatDeserializer,
+  type FlatRmDefaultIssue,
+  type ContextDefaults,
+  type FlatContextOptions,
+  throwOnUnknownFlatKey,
+  UnknownFlatKeyError,
+  type UnknownFlatKeys,
 } from "./flat_deserializer.ts";
 
 export {
+  flatToStructured,
   serializeToStructured,
   serializeToStructuredJson,
   StructuredSerializer,
@@ -48,13 +64,13 @@ export {
 export {
   deserializeFromStructured,
   deserializeFromStructuredJson,
+  deserializeFromStructuredWithIssues,
   StructuredDeserializer,
 } from "./structured_deserializer.ts";
 
 export { structuredToFlat } from "./structured_to_flat.ts";
 
 export {
-  collectExpectedFlatKeys,
   type FlatValidatorOptions,
   validateFlatPayload,
 } from "./flat_validator.ts";
@@ -78,6 +94,7 @@ export {
   getFieldMap,
   inputsForRmType,
   resolveDvType,
+  type DvValueBuildContext,
 } from "./dv_field_maps.ts";
 
 export { countInstancesAtPath, resolveAtPath } from "./instance_nav.ts";

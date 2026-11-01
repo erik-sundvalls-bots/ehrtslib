@@ -5,15 +5,17 @@ Status: proposed (draft for review). Part of the
 
 ## Context
 
-Multi-user editing needs a change log that merges. Auditors want to see how
+Multi-caller editing needs a change log that merges. (A caller is one app
+instance or device writing to the build; one person on two devices is
+multi-caller.) Auditors want to see how
 a commit was produced. Conflict handling needs to re-apply local changes to
-a newer base. If single-app editing mutated the tree directly, these
-features would only exist in the multi-user flavour and the two would
+a newer base. If single-caller editing mutated the tree directly, these
+features would only exist in the multi-caller flavour and the two would
 behave differently.
 
 ## Decision
 
-- Every change, also in the single-app flavour, is an operation in one
+- Every change, also in the single-caller flavour, is an operation in one
   append-only log. Initial operation set: `set-value`, `add-instance`,
   `remove-instance`, `move-instance`, `assign-uid`, `set-composer`,
   `set-participation`, `set-lifecycle`, `bind-template`, `migrate-template`,
@@ -25,7 +27,7 @@ behave differently.
   the log.
 - Each operation records author, timestamp and replica, and targets a node
   uid ([ADR 0003](0003-cb-identity-and-uids.md)), not a path.
-- Single-app applies operations directly. Multi-user synchronises the same
+- A single caller applies operations directly. Multi-caller synchronises the same
   operations through a CRDT; presence (who edits where) is ephemeral and not
   logged.
 - Session playback is replay of the log. Replay is deterministic: the same
@@ -49,16 +51,14 @@ bytes) and `contribution_builder/contribution_build.ts` (`ContributionBuild`,
   operations }`. Readers reject unknown formats and newer versions. Export as
   RFC 8785 bytes plus sha256 (`exportLogBytes`), so the same log always gives
   the same bytes.
-- Phase 1 operations: `create-draft` (carries the template binding, the
-  provisional versioned-object uuid and the initial canonical RM JSON, so
-  replay does not depend on the instance generator), `set-value`,
-  `add-instance`, `remove-instance`, `set-composer`. #167 adds
-  `open-version` (a `modify` draft: binding, base version uid, the stored
-  data and the short keys given to nodes without a uid), `copiedFrom` on
-  `create-draft`, and `record-commit` (version uid, contribution uid,
-  change type, lifecycle state and log hash of a successful commit). These
-  are additions, so the format version stays 1. The others in the list
-  above come with the phases that need them.
+- Operations, format version still 1: `create-draft`, `open-version`,
+  `record-commit`, `set-value`, `edit-text`, `add-instance`,
+  `remove-instance`, `move-instance`, `assign-uid`, `set-composer`,
+  `set-participation`, `set-lifecycle`, `migrate-template`, `import`,
+  `discard`, `join-build`, `leave-build`, `set-role`, `resolve`.
+  `create-draft` carries the initial template binding (there is no separate
+  `bind-template`). `import` stores the canonical document it produced.
+  `set-value` and `edit-text` may carry `rev` (#243).
 - Every operation has `replica`, per-replica `seq`, `author` (from the
   caller's context, overridable per call), `timestamp` and `draft`.
   `replica` + `seq` identifies an operation across replicas.
@@ -67,14 +67,16 @@ bytes) and `contribution_builder/contribution_build.ts` (`ContributionBuild`,
   not by index, so concurrent inserts do not shift each other.
 - New keys are recorded in the operation (`keys`, depth-first with object
   members in sorted order), never re-minted on replay.
-- No CRDT library is chosen: the single-app adapter needs none, and the core
+- No CRDT library is chosen: the single-caller adapter needs none, and the core
   sees only the `OperationLogAdapter` interface (`append`, `operations`).
   The Automerge / Loro spike stays open.
 
 ## Consequences
 
-- Undo, playback, per-value author colouring and conflict replay all come
-  from one source.
+- History replay (playback), copy forward from an earlier state,
+  per-value author colouring and conflict replay all come from one source.
+  Nothing is rewound: bringing something back is a new operation. Undo in a
+  UI is the UI's business, not the builder's.
 - The log grows with editing activity; compaction must not drop what
   playback and audit need (retention is the caller's policy, see
   [ADR 0005](0005-cb-storage-encryption-policy-neutrality.md)).
@@ -89,7 +91,7 @@ bytes) and `contribution_builder/contribution_build.ts` (`ContributionBuild`,
   see design section 11.8). Rejected by the maintainer as overkill; the
   log is sufficient.
 
-- **Direct tree mutation in single-app mode.** Rejected: no playback, and
+- **Direct tree mutation in single-caller mode.** Rejected: no playback, and
   two behaviours to test.
 - **Operational transformation (OT) with a central server.** Rejected:
   needs a server for every edit and does not suit offline or peer-to-peer

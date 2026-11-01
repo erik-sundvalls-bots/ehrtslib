@@ -222,7 +222,7 @@ export class ADL2Tokenizer {
         this.advance();
         return this.makeToken(TokenType.STAR, "*", startLine, startColumn);
       case "/": {
-        if (this.charBefore() === "{") {
+        if (this.charBefore() === "{" || this.regexOnOwnLine()) {
           return this.scanRegex(startLine, startColumn);
         }
         this.advance();
@@ -660,6 +660,19 @@ export class ADL2Tokenizer {
   
   private isAtEnd(): boolean {
     return this.position >= this.input.length;
+  }
+
+  /**
+   * `{` then, on the next line, a whole `/regex/` (not a differential path
+   * such as `/data[id2]/items matches {`).
+   */
+  private regexOnOwnLine(): boolean {
+    let i = this.position - 1;
+    while (i >= 0 && /\s/.test(this.input[i])) i--;
+    if (i < 0 || this.input[i] !== "{") return false;
+    const end = this.input.indexOf("\n", this.position);
+    const line = this.input.slice(this.position, end < 0 ? undefined : end);
+    return /^\/(?:[^/\\]|\\.)*\/\s*[,;}]?\s*$/.test(line);
   }
 
   private charBefore(): string {

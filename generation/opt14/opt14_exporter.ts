@@ -15,7 +15,7 @@
  * affected nodes; with it off, a warning lists what is dropped.
  */
 
-import { buildAdl14CodeMap, idToAtCode } from "../id_to_at_code.ts";
+import { buildAdl14CodeMap, externalCodeOf, idToAtCode } from "../id_to_at_code.ts";
 import { bindingKeyKind, parseTermBinding } from "../term_binding.ts";
 import { attributesFor } from "../../meta/rm_attributes.ts";
 import {
@@ -141,8 +141,10 @@ export function buildCodeMap(
   };
   for (const bag of Object.values(flat.terms)) Object.keys(bag ?? {}).forEach(add);
   for (const members of Object.values(flat.valueSets)) members.forEach(add);
+  const nodeTypes = new Map<string, string>();
   const walk = (o: PObject) => {
     add(o.nodeId);
+    if (o.nodeId && o.rmType && !nodeTypes.has(o.nodeId)) nodeTypes.set(o.nodeId, o.rmType);
     if (o.termConstraint) add(o.termConstraint.replace(/^\[|\]$/g, ""));
     for (const a of o.attrs ?? []) a.children.forEach(walk);
   };
@@ -150,6 +152,8 @@ export function buildCodeMap(
   return buildAdl14CodeMap(codes, {
     normalise: (c) => collapseCode(c, baseDepth),
     terms: flat.terms,
+    nodeTypes,
+    bindings: flat.bindings,
     warn,
   });
 }
@@ -402,7 +406,11 @@ export class Opt14Exporter {
       );
       for (const c of codes) {
         if (!/^(id|at)\d/i.test(c)) continue;
-        out[map(c)] = { ...out[map(c)], ...pClone(bag[c]) };
+        const k = map(c);
+        // Dropped node ids and value codes written back as external codes
+        // have no local term (#252).
+        if (!k || k.includes("::")) continue;
+        out[k] = { ...out[k], ...pClone(bag[c]) };
       }
       terms14[lang] = out;
     }
@@ -723,7 +731,7 @@ export class Opt14Exporter {
           continue;
         }
         const at = this.code14(c, code);
-        if (!at) continue;
+        if (!at || at.includes("::")) continue;
         const list = byTerm.get(parsed.binding.terminology) ?? [];
         list.push([at, parsed.binding.code]);
         byTerm.set(parsed.binding.terminology, list);
@@ -838,7 +846,7 @@ export class Opt14Exporter {
       o.kind === "complex" &&
       (o.rmType === "DV_ORDINAL" || o.rmType === "DV_SCALE")
     ) {
-      this.writeOrdinalOrScale(x, o, tag, occ);
+      this.writeOrdinalOrScale(x, o, tag, occ, comp);
       return;
     }
 
@@ -991,7 +999,21 @@ export class Opt14Exporter {
             codes: bound.map((b) => b!.code),
           };
         }
-        return { terminology: "local", codes: members.map(local) };
+        const mapped = members.map(local);
+        const ext = mapped.map(externalCodeOf);
+        const extTerms = new Set(ext.map((e) => e?.terminology));
+        if (ext.every((e) => e) && extTerms.size === 1) {
+          return { terminology: ext[0]!.terminology, codes: ext.map((e) => e!.code) };
+        }
+        if (ext.some((e) => e)) {
+          // A mixed local/external value set cannot be one ADL 1.4 code list.
+          this.warn(`${comp.base.id}: value set ${c} mixes local and external codes; external members kept as local codes`);
+          return {
+            terminology: "local",
+            codes: members.map((m, i) => ext[i] ? adl2CodeToAdl14(collapseCode(m, comp.baseDepth)) : mapped[i]),
+          };
+        }
+        return { terminology: "local", codes: mapped };
       }
       const b = bindingFor(comp.flat.bindings, c);
       if (b) {
@@ -1005,7 +1027,10 @@ export class Opt14Exporter {
     }
     const b = bindingFor(comp.flat.bindings, c);
     if (b && /^at9\d{3}/.test(c)) return { terminology: b.terminology, codes: [b.code] };
-    return { terminology: "local", codes: [local(c)] };
+    const one = local(c);
+    const written = externalCodeOf(one);
+    if (written) return { terminology: written.terminology, codes: [written.code] };
+    return { terminology: "local", codes: [one] };
   }
 
   private writeCodePhrase(x: Xml, o: PObject, comp: Component): void {
@@ -1093,6 +1118,7 @@ export class Opt14Exporter {
     o: PObject,
     tag: string,
     occ: PInterval,
+    comp: Component,
   ): void {
     const xsi = o.rmType === "DV_SCALE" ? "C_DV_SCALE" : "C_DV_ORDINAL";
     x.open(tag, ` xsi:type="${xsi}"`);
@@ -1117,9 +1143,12 @@ export class Opt14Exporter {
           x.open("symbol");
           x.open("defining_code");
           x.open("terminology_id");
-          x.leaf("value", row.symbolTerminology ?? "local");
+          const local = !row.symbolTerminology || row.symbolTerminology === "local";
+          const mapped = local ? this.code14(comp, row.symbolCode) : row.symbolCode;
+          const ext = externalCodeOf(mapped);
+          x.leaf("value", ext?.terminology ?? row.symbolTerminology ?? "local");
           x.close("terminology_id");
-          x.leaf("code_string", row.symbolCode);
+          x.leaf("code_string", ext?.code ?? mapped);
           x.close("defining_code");
           x.close("symbol");
         }

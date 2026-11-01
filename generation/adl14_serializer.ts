@@ -51,6 +51,9 @@ export class ADL14Serializer {
     const rewritten = rewriteAdl2CodesInTextWithMap(adl, {
       terms: (archetype.ontology as { term_definitions?: Adl2TermTable } | undefined)
         ?.term_definitions,
+      bindings: (archetype.ontology as
+        | { term_bindings?: Record<string, Record<string, string>> }
+        | undefined)?.term_bindings,
       warn: (m) => this.warnings.push(m),
     });
     adl = rewritten.adl;
@@ -61,7 +64,10 @@ export class ADL14Serializer {
     const expanded = expandAcConstraintsInAdl(
       adl,
       valueSets,
-      (c) => rewritten.map.get(c) ?? idToAtCode(c),
+      (c) => {
+        const m = rewritten.map.get(c);
+        return m && !m.includes("::") ? m : idToAtCode(c);
+      },
     );
     adl = expanded.adl;
     adl = stripValueSetsBlock(adl);
@@ -309,6 +315,8 @@ export class ADL14Serializer {
           continue;
         }
         const kind = bindingKeyKind(code);
+        // Written back as the external code itself (#252): no binding needed.
+        if (codeMap.get(code)?.includes("::")) continue;
         const mappedKey = this.mapBindingKey(code, codeMap);
         if (!mappedKey) {
           this.warnings.push(
