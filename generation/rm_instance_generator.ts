@@ -647,6 +647,14 @@ export class RMInstanceGenerator {
     cObject: openehr_am.C_PRIMITIVE_OBJECT | openehr_am.C_PRIMITIVE,
     pathHint: string,
   ): any {
+    // OPT XML wraps C_STRING / C_INTEGER / … in C_PRIMITIVE_OBJECT.item.
+    const item = (cObject as { item?: unknown }).item;
+    if (
+      item instanceof openehr_am.C_STRING || item instanceof openehr_am.C_BOOLEAN ||
+      item instanceof openehr_am.C_INTEGER || item instanceof openehr_am.C_REAL
+    ) {
+      return this.generatePrimitive(item, pathHint);
+    }
     if (cObject instanceof openehr_am.C_STRING) {
       const values = (cObject as { list?: string[] }).list;
       return cObject.assumed_value?.value ?? values?.[0] ??
