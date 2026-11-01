@@ -195,8 +195,9 @@ id-coded node and value code collisions (#252; decided 2026-11-01).
 Node ids are what RM data (`archetype_node_id`) and AQL paths carry, so
 they never move. One rule, in `buildAdl14CodeMap`, cached per archetype
 for an id-coded template (`adl14CodeFor`), is used by the OPT 1.4 export,
-Web Template value codes, FLAT and STRUCTURED codes, and RM data
-down-conversion:
+`ADL14Serializer`, Web Template value codes, FLAT and STRUCTURED codes,
+and RM data down-conversion in `prepareContribution` (from each draft's
+bound template):
 
 - A LOCATABLE node id always maps `idN` → `at(N−1)`; the root never moves.
 - A node id of a non-LOCATABLE type (DV_*, CODE_PHRASE, …) had no node id

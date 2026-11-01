@@ -247,9 +247,23 @@ export function rewriteAdl2CodesInTextWithMap(
   for (const m of adl.matchAll(/\b([A-Z][A-Z0-9_]*(?:<[A-Z0-9_,<> ]+>)?)\[(id\d+(?:\.\d+)*)[\],]/g)) {
     if (!nodeTypes.has(m[2])) nodeTypes.set(m[2], m[1]);
   }
-  // ADL text has no place for a `terminology::code` written back here.
-  const map = buildAdl14CodeMap(codes, { ...options, nodeTypes, externalCodes: false });
-  let out = adl.replace(ADL_CODE_TOKEN, (c) => map.get(c) ?? c);
+  const map = buildAdl14CodeMap(codes, { ...options, nodeTypes });
+  let out = adl;
+  for (const [code, target] of map) {
+    const ext = externalCodeOf(target);
+    if (!ext) continue;
+    // A value code written back to its external code: the constraint names
+    // the external code, and the code has no local term (#252).
+    const c = code.replace(/\./g, "\\.");
+    out = out.replace(new RegExp(`\\[(?:local::)?${c}\\]`, "g"), `[${ext.terminology}::${ext.code}]`);
+    out = out.replace(new RegExp(`^([ \\t]*)\\["${c}"\\]\\s*=\\s*<[^\\n]*>[ \\t]*\\n`, "gm"), "");
+    out = out.replace(new RegExp(`^([ \\t]*)\\["${c}"\\]\\s*=\\s*<[ \\t]*\\n[\\s\\S]*?^\\1>[ \\t]*\\n`, "gm"), "");
+  }
+  // Anything else that names such a code keeps the plain shift.
+  out = out.replace(ADL_CODE_TOKEN, (c) => {
+    const m = map.get(c);
+    return m === undefined ? c : externalCodeOf(m) ? idToAtCode(c) : m;
+  });
   // Dropped node ids: `DV_TEXT[]` → `DV_TEXT`, `/value[]` → `/value`.
   out = out.replace(/(?<=[\w>])\[\]/g, "");
   return { adl: out, map };

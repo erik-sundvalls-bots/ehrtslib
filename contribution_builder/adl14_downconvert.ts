@@ -97,8 +97,9 @@ export function adl14DownconversionCdrWarnings(
 ): string[] {
   if (hasAdl14CdrExportContext(binding, draft)) return [];
   return [
-    "ADL2-native template: ADL 1.4 down-conversion uses the default code shift only " +
-      "(id→at and value de-padding) and may not match the OPT 1.4 on the CDR. " +
+    "ADL2-native template: ADL 1.4 down-conversion uses ehrtslib's code rule (id→at, " +
+      "value de-padding and the template's per-archetype collision map) and the ADL2 " +
+      "template id, and may not match the OPT 1.4 on the CDR. " +
       "Pass bindTemplate({ opt14Export }) from exportAdl2TemplateToOpt14 on the OPT " +
       "actually uploaded to the CDR, or set draft adl14.templateId and adl14.codeMap on commit.",
   ];

@@ -26,6 +26,14 @@ import {
   adl14CodeMapWarnings,
 } from "../../../generation/adl14_code_map_cache.ts";
 import { downConvertToAdl14 } from "../../../contribution_builder/adl14_downconvert.ts";
+import {
+  bindTemplate,
+  ContributionBuild,
+  DraftValidator,
+  prepareContribution,
+  ROOT_TARGET,
+} from "../../../contribution_builder/mod.ts";
+import { ADL14Serializer } from "../../../generation/adl14_serializer.ts";
 import type { TemplateBinding } from "../../../contribution_builder/template_binding.ts";
 
 const DIR = new URL("../../adl2/ckm_mirror_252/", import.meta.url);
@@ -38,7 +46,7 @@ function archetype(name: string): any {
   const r: any = new ADL2Parser(
     new ADL2Tokenizer(Deno.readTextFileSync(new URL(name, DIR))).tokenize(),
   ).parse();
-  return r.archetype ?? r;
+  return r.archetype ?? r.template ?? r;
 }
 
 const noResolver = { resolve: () => undefined } as unknown as ArchetypeResolver;
@@ -215,4 +223,111 @@ Deno.test("#252 id-coded draft down-conversion: written-back value code changes 
     s.includes('"value":"openehr"') && s.includes('"code_string":"128"'),
     s,
   );
+});
+
+Deno.test("#252 faeces: ADL14Serializer writes property [openehr::128], no at9000", () => {
+  const ser = new ADL14Serializer();
+  const adl = ser.serialize(archetype(FAECES));
+  assert(adl.includes("ELEMENT[at0018]"), adl);
+  assert(adl.includes("property matches {[openehr::128]}"), adl);
+  assert(!/at9\d{3}/.test(adl), adl);
+  assert(!adl.includes("added by post-parse processor"), adl);
+  assertEquals(ser.warnings, []);
+});
+
+function faecesTemplate() {
+  const demo = archetype(
+    "../template_export_123/openEHR-EHR-COMPOSITION.report_demo.v1.0.0.adls",
+  );
+  const faeces = archetype(FAECES);
+  const template = archetype(
+    "openEHR-EHR-COMPOSITION.t_faeces_252.v1.0.0.adls",
+  );
+  const major = (id: string) => id.replace(/\.v(\d+)\..*$/, ".v$1");
+  const byId = new Map<string, unknown>();
+  for (const a of [demo, faeces]) byId.set(major(a.archetype_id.value), a);
+  const resolver = {
+    resolve: (id: string) => byId.get(major(id)),
+  } as unknown as ArchetypeResolver;
+  return flattenToOperationalTemplate(template, resolver);
+}
+
+const local = (code: string) => ({
+  _type: "CODE_PHRASE",
+  terminology_id: { _type: "TERMINOLOGY_ID", value: "local" },
+  code_string: code,
+});
+const text = (value: string) => ({ _type: "DV_TEXT", value });
+
+Deno.test("#252 faeces: commit() down-converts with the bound template's code map (no caller option)", async () => {
+  const tpl = await bindTemplate(faecesTemplate());
+  assertEquals(tpl.binding.adl2CodingSystem, "id-coded");
+  assertEquals(tpl.warnings.filter((w) => w.startsWith("ADL 1.4 codes")), []);
+  const build = ContributionBuild.create({ author: { id: "u" } });
+  const draft = build.newComposition(tpl, { language: "en", territory: "SE" });
+  build.setComposer(draft, { _type: "PARTY_IDENTIFIED", name: "Dr A" });
+  const time = { _type: "DV_DATE_TIME", value: "2026-11-01T10:00:00Z" };
+  build.addInstance(draft, ROOT_TARGET, "content", {
+    _type: "OBSERVATION",
+    archetype_node_id: "openEHR-EHR-OBSERVATION.faeces.v1",
+    name: text("Faeces"),
+    archetype_details: {
+      _type: "ARCHETYPED",
+      archetype_id: {
+        _type: "ARCHETYPE_ID",
+        value: "openEHR-EHR-OBSERVATION.faeces.v1",
+      },
+      rm_version: "1.1.0",
+    },
+    language: {
+      ...local("en"),
+      terminology_id: { _type: "TERMINOLOGY_ID", value: "ISO_639-1" },
+    },
+    encoding: {
+      ...local("UTF-8"),
+      terminology_id: { _type: "TERMINOLOGY_ID", value: "IANA_character-sets" },
+    },
+    subject: { _type: "PARTY_SELF" },
+    data: {
+      _type: "HISTORY",
+      archetype_node_id: "id2",
+      name: text("History"),
+      origin: time,
+      events: [{
+        _type: "POINT_EVENT",
+        archetype_node_id: "id3",
+        name: text("Any event"),
+        time,
+        data: {
+          _type: "ITEM_TREE",
+          archetype_node_id: "id4",
+          name: text("Tree"),
+          items: [{
+            _type: "ELEMENT",
+            archetype_node_id: "id19",
+            name: text("Clinical description"),
+            value: {
+              _type: "DV_CODED_TEXT",
+              value: "min",
+              defining_code: local("at19"),
+            },
+          }],
+        },
+      }],
+    },
+  });
+  const p = await prepareContribution(build, await DraftValidator.create(), {
+    systemId: "x",
+  }, {
+    drafts: [{ draftId: draft, template: tpl }],
+    committer: { _type: "PARTY_IDENTIFIED", name: "C" },
+    creatingSystemId: "cdr",
+    mode: "incomplete",
+  });
+  const element =
+    // deno-lint-ignore no-explicit-any
+    (p.body as any).versions[0].data.content[0].data.events[0].data.items[0];
+  assertEquals(element.archetype_node_id, "at0018");
+  assertEquals(element.value.defining_code.terminology_id.value, "openehr");
+  assertEquals(element.value.defining_code.code_string, "128");
 });

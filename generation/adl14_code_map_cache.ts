@@ -91,8 +91,10 @@ function mapsFor(opt: ScopedOpt): Map<string, Map<string, string>> {
   for (const [scope, x] of collect(opt)) {
     const terms = termsFor(opt, scope);
     for (const bag of Object.values(terms ?? {})) {
+      // Value codes only: node ids come from the definition walk (a merged
+      // template table also holds the node ids of inlined archetypes).
       for (const c of Object.keys(bag ?? {})) {
-        if (/^(id|at)\d/i.test(c)) x.codes.add(c);
+        if (/^at\d/i.test(c)) x.codes.add(c);
       }
     }
     maps.set(
@@ -121,8 +123,10 @@ export function adl14CodeFor(
   code: string,
   scope?: string,
 ): string {
-  if (!opt || adl2CodingSystemOf(opt as ScopedOpt) !== "id-coded") return code;
   if (!/^(id|at)\d/i.test(code) || /^at0\d{3}/i.test(code)) return code;
+  if (!opt || adl2CodingSystemOf(opt as ScopedOpt) !== "id-coded") {
+    return idToAtCode(code);
+  }
   const o = opt as ScopedOpt;
   const m = mapsFor(o).get(scope ?? o.archetype_id?.value ?? "")?.get(code);
   return m !== undefined && m !== "" ? m : idToAtCode(code);
