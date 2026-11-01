@@ -215,16 +215,13 @@ Deno.test("#239 unknown keys are reported, not dropped silently", async () => {
   assertEquals(ignore.issues.filter((i) => i.kind === "unknown-key"), []);
 });
 
-Deno.test("#239 older ehrtslib paths with a HISTORY data segment are accepted", async () => {
+Deno.test("#239 a HISTORY data segment is not a FLAT path (spec Level Removal)", async () => {
   const { wt } = await load("ehrbase_blood_pressure_simple.de.v0.opt");
-  const { composition, issues } = deserializeFromFlatWithIssues({
+  const { issues } = deserializeFromFlatWithIssues({
     ...INPUT,
-    [`${OBS}/systolic|magnitude`]: undefined as never,
     [`${OBS}/data/any_event/systolic|magnitude`]: 130,
   }, wt, { clock: CLOCK });
-  assertEquals(issues.map((i) => i.kind), ["legacy-path"]);
-  const items = (composition as Rm).content[0].data.events[0].data.items as Rm[];
-  assert(items.some((e) => e.value?.magnitude === 130));
+  assertEquals(issues.filter((i) => i.severity === "error").map((i) => i.path), [`${OBS}/data/any_event/systolic|magnitude`]);
 });
 
 Deno.test("#239 ELEMENT null_flavour round trips via _null_flavour", async () => {

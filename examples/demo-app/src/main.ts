@@ -3150,8 +3150,8 @@ function showError(message: string) {
 
 /**
  * List FLAT/STRUCTURED input warnings and notes that did not stop the
- * conversion (kept or corrected coded text, unknown keys, legacy paths,
- * missing values that have no default).
+ * conversion (kept or corrected coded text, unknown keys, missing values
+ * that have no default).
  */
 function showInputIssues(
   issues: { severity: string; path: string; message: string }[],

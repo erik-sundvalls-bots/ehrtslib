@@ -77,7 +77,7 @@ const INPUT_CTX_CONTEXT = new Set(["end_time", "location", "health_care_facility
  * RM attributes a Web Template node's descendants address (first AQL
  * segment below the node), so they are not written again as `_<attribute>`.
  */
-function templateAttributes(node: WebTemplateNode, wt: WebTemplate): Set<string> {
+export function templateAttributes(node: WebTemplateNode, wt: WebTemplate): Set<string> {
   const base = node.aqlPath === "/" ? "" : node.aqlPath;
   const out = new Set<string>();
   // Objects the template constrains without a node of their own (HISTORY,

@@ -114,7 +114,7 @@ Composer PARTY_SELF (ehrtslib convention, pending SEC clarification): the spec e
 
 Times: `HISTORY.origin` comes from its path, else `ctx/history_origin`, else the earliest event time, else `ctx/time`, else the clock. An `EVENT.time` without a value gets `HISTORY.origin`. The spec has two rules for the origin (earliest event time, and `ctx/time`); ehrtslib uses the event time when events have times.
 
-The first path segment may be the template id, the Web Template tree id, or the normalised composition name (as EHRbase writes it). Keys in the older ehrtslib form with a `data` segment for HISTORY are accepted with a `legacy-path` warning.
+The first path segment may be the template id, the Web Template tree id, or the normalised composition name (as EHRbase writes it).
 
 Why options: platforms differ. Some fill defaults from the server clock, some reject what is missing, some keep `ctx/` keys in their output. The defaults suit a converter: lossless output, complete RM on input, and no key dropped without an issue. See the [research note](research/flat-input-output-ctx-2026-10.md).
 
@@ -195,7 +195,7 @@ A path segment `_<attr>` addresses an RM attribute of the object at that path (s
 - Abstract node types take the subtype the attributes need: an EVENT with `/width` or `|sample_count` is an INTERVAL_EVENT, a PARTY_PROXY with `/relationship` a PARTY_RELATED.
 - `EVENT.offset` is computed (time − `HISTORY.origin`). It is not written; `_offset` on input is ignored with a warning.
 - ehrtslib conventions for values the spec has no form for: `|_type` when the RM type is not the one the attribute type or the keys imply, and `|raw` (canonical JSON) as a last resort.
-- Attributes that are not RM attributes of the object are `unknown-key` issues (see `unknownKeys`).
+- Attributes that are not RM attributes of the object, or that the template already covers (such as OBSERVATION `data`: there is no `…/data/any_event` path), are `unknown-key` issues with the `unknownKeys` severity.
 
 Reading also accepts an attribute name without `_` when no template node has that id (the spec examples write `expiry_time`), and `|scheme` or `|id_scheme` on OBJECT_REF.
 

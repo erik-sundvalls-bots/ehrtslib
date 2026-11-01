@@ -10,6 +10,7 @@
  * @see docs/vendor/simplified_formats.md
  */
 
+import { templateAttributes } from "./flat_serializer.ts";
 import type { FlatPayload, WebTemplate, WebTemplateNode } from "./types.ts";
 import { normalizeWebTemplateId, templateRootId } from "./normalize.ts";
 import {
@@ -76,7 +77,6 @@ interface ResolvedKey {
   node: WebTemplateNode;
   segments: ParsedSegment[];
   attr: ParsedSegment[];
-  legacy: boolean;
 }
 
 function parseSegments(basePath: string): ParsedSegment[] {
@@ -215,7 +215,6 @@ export class FlatDeserializer {
     const comp: RmObject = { _type: "COMPOSITION" };
     const groups = new Map<string, LeafGroup>();
     const ctx: CtxFields = new Map();
-    const legacyKeys: string[] = [];
     const unknownMode = this.options.unknownKeys ?? "error";
     const unknown = (key: string, message: string, severity = unknownMode) => {
       if (severity === "ignore") return;
@@ -260,7 +259,6 @@ export class FlatDeserializer {
         unknown(key, "no Web Template node has this path");
         continue;
       }
-      if (resolved.legacy) legacyKeys.push(key);
       const node = resolved.node;
       segments.splice(0, segments.length, ...resolved.segments);
 
@@ -291,16 +289,6 @@ export class FlatDeserializer {
       }
     }
 
-    if (legacyKeys.length) {
-      this.issues.push({
-        path: legacyKeys[0],
-        severity: "warning",
-        kind: "legacy-path",
-        message:
-          `${legacyKeys.length} key(s) use the older ehrtslib path form with a HISTORY "data" segment (and a single event segment); accepted. Current paths leave these segments out (spec "Level Removal")`,
-      });
-    }
-
     for (const group of groups.values()) {
       this.assignGroup(comp, group);
     }
@@ -321,26 +309,6 @@ export class FlatDeserializer {
     return this.deserialize(JSON.parse(json) as FlatPayload);
   }
 
-  /**
-   * Older ehrtslib Web Templates kept a `data` segment for HISTORY below an
-   * OBSERVATION and a segment for a single event. Map such keys to the
-   * collapsed form.
-   */
-  private legacySegments(segments: ParsedSegment[]): ParsedSegment[] | undefined {
-    for (let i = 1; i < segments.length; i++) {
-      if (segments[i].id !== "data") continue;
-      const parent = this.nodeByChain.get(segments.slice(0, i).map((s) => s.id).join("/"));
-      if (parent?.rmType !== "OBSERVATION") continue;
-      for (const drop of [1, 2]) {
-        const candidate = [...segments.slice(0, i), ...segments.slice(i + drop)];
-        if (this.nodeByChain.has(candidate.map((s) => s.id).join("/"))) {
-          return candidate;
-        }
-      }
-    }
-    return undefined;
-  }
-
   private group(groups: Map<string, LeafGroup>, node: WebTemplateNode, segments: ParsedSegment[]): LeafGroup {
     const groupKey = segments.map((s) => `${s.id}:${s.index}`).join("/");
     let group = groups.get(groupKey);
@@ -351,15 +319,11 @@ export class FlatDeserializer {
     return group;
   }
 
-  /** Node for a segment chain (indices ignored), with the legacy HISTORY form. */
-  private matchChain(segments: ParsedSegment[]): { node: WebTemplateNode; segments: ParsedSegment[]; legacy: boolean } | undefined {
-    if (!segments.length) return { node: this.webTemplate.tree, segments: [], legacy: false };
+  /** Node for a segment chain (indices ignored). */
+  private matchChain(segments: ParsedSegment[]): { node: WebTemplateNode; segments: ParsedSegment[] } | undefined {
+    if (!segments.length) return { node: this.webTemplate.tree, segments: [] };
     const node = this.nodeByChain.get(segments.map((s) => s.id).join("/"));
-    if (node) return { node, segments, legacy: false };
-    const legacy = this.legacySegments(segments);
-    if (!legacy) return undefined;
-    const legacyNode = this.nodeByChain.get(legacy.map((s) => s.id).join("/"));
-    return legacyNode ? { node: legacyNode, segments: legacy, legacy: true } : undefined;
+    return node ? { node, segments } : undefined;
   }
 
   /** RM types an attribute segment below `node` may belong to (ELEMENT first for a leaf). */
@@ -388,6 +352,9 @@ export class FlatDeserializer {
       const prefix = this.matchChain(segments.slice(0, j));
       if (!prefix) continue;
       const seg = segments[j].id;
+      // An attribute the template already covers (OBSERVATION `data`, …) has
+      // no FLAT path of its own.
+      if (templateAttributes(prefix.node, this.webTemplate).has(seg)) return undefined;
       if (this.attributeOwners(prefix.node).some((t) => isRmAttributeSegmentOfAny(t, seg))) {
         return { ...prefix, attr: segments.slice(j) };
       }
@@ -403,7 +370,7 @@ export class FlatDeserializer {
       const computed = /\/_?offset(:\d+)?$/.test(path) && /EVENT$/.test(node.rmType);
       this.issues.push({
         path: `${node.aqlPath}${path}`,
-        severity: "warning",
+        severity: computed || mode === "warning" ? "warning" : "error",
         kind: "unknown-key",
         message: computed
           ? "EVENT.offset is computed (time − HISTORY.origin), not stored; ignored"
