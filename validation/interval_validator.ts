@@ -9,6 +9,7 @@
  */
 
 import type { ValidationMessage } from "./template_validator.ts";
+import { instanceRmType } from "./rm_type.ts";
 
 /**
  * Validates DV_INTERVAL instances
@@ -120,17 +121,18 @@ export class IntervalValidator {
   }
   
   /**
-   * Check if an object represents an interval
+   * An interval by its RM type (DV_INTERVAL, INTERVAL, MULTIPLICITY_INTERVAL,
+   * …). An object without an RM type (plain JSON without `_type`) counts when
+   * it has interval attributes.
    */
-  private isInterval(obj: any): boolean {
-    // Check for interval-like properties
-    return (
-      obj._type?.includes("INTERVAL") ||
-      (obj.lower !== undefined || obj.upper !== undefined ||
-       obj.lower_unbounded !== undefined || obj.upper_unbounded !== undefined)
-    );
+  private isInterval(obj: object): boolean {
+    const type = instanceRmType(obj);
+    if (type) return /(^|_)INTERVAL$/i.test(type.split("<")[0]);
+    const rec = obj as Record<string, unknown>;
+    return rec.lower !== undefined || rec.upper !== undefined ||
+      rec.lower_unbounded !== undefined || rec.upper_unbounded !== undefined;
   }
-  
+
   /**
    * Extract a comparable value from an interval bound
    */

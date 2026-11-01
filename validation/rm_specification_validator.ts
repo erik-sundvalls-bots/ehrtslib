@@ -19,7 +19,6 @@ import {
   isSubtypeOf,
   type RmAttributeMeta,
 } from "../meta/mod.ts";
-import { TypeRegistry } from "../serialization/common/type_registry.ts";
 import { instructionStateRubric } from "../term/openehr_group_rubrics.ts";
 import {
   attributeNamesInExpression,
@@ -27,6 +26,7 @@ import {
 } from "./bmm_invariant_eval.ts";
 import { BMM_INVARIANTS } from "./bmm_invariants.generated.ts";
 import type { ValidationMessage } from "./template_validator.ts";
+import { instanceRmType } from "./rm_type.ts";
 
 /**
  * RM specification constraints knowledge base
@@ -1092,18 +1092,6 @@ const PRIMITIVE_BMM_TYPES = new Set([
   "Iso8601_duration",
 ]);
 
-function instanceRmType(value: unknown): string | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return undefined;
-  }
-  const rec = value as Record<string, unknown>;
-  if (typeof rec._type === "string" && rec._type.length > 0) return rec._type;
-  const ctor = (value as object).constructor;
-  if (typeof ctor !== "function" || ctor === Object) return undefined;
-  const name = TypeRegistry.getTypeNameFromInstance(value);
-  if (!name || name === "OBJECT" || name === "ARRAY") return undefined;
-  return name;
-}
 
 function readAttribute(obj: object, name: string): unknown {
   try {
