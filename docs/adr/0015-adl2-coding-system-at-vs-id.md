@@ -179,14 +179,24 @@ All six next-release items are done:
    files and one archetype), regenerated with `UPDATE_GOLDEN=1`.
 6. README and `docs/ADL_SUPPORT.md` "ADL2 coding systems".
 
-Known limits, not in scope here (follow-up: [#252](https://github.com/ErikSundvall/ehrtslib/issues/252), with root causes and proposed fixes):
+OPT2 text round trip ([#252](https://github.com/ErikSundvall/ehrtslib/issues/252)):
+an up-converted template written with `OPT2Serializer` and parsed again
+gives the same Web Template as the OPT 1.4, for every `test_data/opt14`
+fixture in both coding systems (`opt2_text_round_trip.test.ts`). Minted
+node ids are `at9000+` / `id9000+`, as in Archie, and are marked in the
+text by a `synthetic_node_id` entry in `annotations`, keyed by the minted
+node's own path. This is on by default (`syntheticNodeIdAnnotations:
+false` turns it off). The marker travels with the text, so no side file is
+needed. For compatibility with Archie's format, `upconvertOpt14ToAdl2`
+can also write and read Archie's conversion log (`conversionLog`, off by
+default), which keeps minted codes stable across re-conversions.
 
-- Minted node ids are not marked in ADL2 text. After writing and
-  re-parsing, a node that had no id in OPT 1.4 (for example a nested
-  CLUSTER) gets its minted id in paths.
-- OPT2 text round trip loses some archetype term scopes and occurrences
-  (names and `max` differ after re-parsing), so the golden test compares
-  paths, types and node ids only.
-- Node ids are mapped one-to-one by `idToAtCode`. A node id that the
-  collision-free OPT 1.4 export (`buildAdl14CodeMap`) moves to `at9000+`
-  keeps its shifted code in Web Template paths.
+Known limit, left for a decision (#252):
+
+- Node ids are mapped one-to-one by `idToAtCode`. A node id of a natively
+  authored id-coded template that the collision-free OPT 1.4 export
+  (`buildAdl14CodeMap`) moves to `at9000+` keeps its plain mapping in Web
+  Template and FLAT paths, so those paths differ from the exported OPT
+  1.4. The export warns about each moved code. Using the collision map
+  in paths changes which at-code an id-coded node has in data, so it is
+  left for a decision.
