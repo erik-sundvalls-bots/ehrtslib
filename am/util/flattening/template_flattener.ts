@@ -307,8 +307,13 @@ export function flattenToOperationalTemplate(
       [source, ...inlinedArchetypes],
       scopeKeys,
     );
-  (opt as { archetype_term_bindings?: ReturnType<typeof buildArchetypeBindingIndex> })
-    .archetype_term_bindings = buildArchetypeBindingIndex([source, ...inlinedArchetypes], scopeKeys);
+  (opt as {
+    archetype_term_bindings?: ReturnType<typeof buildArchetypeBindingIndex>;
+  })
+    .archetype_term_bindings = buildArchetypeBindingIndex([
+      source,
+      ...inlinedArchetypes,
+    ], scopeKeys);
 
   return opt;
 }

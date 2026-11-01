@@ -137,13 +137,20 @@ export function buildArchetypeBindingIndex(
   const index: Record<string, Record<string, Record<string, string>>> = {};
   for (const arch of inlinedArchetypes) {
     if (!arch) continue;
-    const onto = (arch.ontology ?? (arch as { terminology?: unknown }).terminology) as
-      | { term_bindings?: Record<string, Record<string, string>> }
-      | undefined;
+    const onto =
+      (arch.ontology ?? (arch as { terminology?: unknown }).terminology) as
+        | { term_bindings?: Record<string, Record<string, string>> }
+        | undefined;
     const bindings = onto?.term_bindings;
     if (!bindings || typeof bindings !== "object") continue;
-    const keys = new Set<string>([archetypeIdString(arch), readTemplateId(arch as { template_id?: unknown }), ...(scopeKeys?.get(arch) ?? [])]
-      .filter((k): k is string => !!k));
+    const keys = new Set<string>(
+      [
+        archetypeIdString(arch),
+        readTemplateId(arch as { template_id?: unknown }),
+        ...(scopeKeys?.get(arch) ?? []),
+      ]
+        .filter((k): k is string => !!k),
+    );
     for (const key of keys) index[key] ??= bindings;
   }
   return index;
