@@ -19,7 +19,6 @@ import { ADL2Parser } from "../parser/adl2_parser.ts";
 import { ADL2Tokenizer } from "../parser/adl2_tokenizer.ts";
 import { isOptXml, parseOptXml } from "../parser/legacy/opt_xml_parser.ts";
 import {
-  hasAdl14NodeIds,
   type Opt14Header,
   readOpt14Header,
   upconvertOpt14ToAdl2,
@@ -31,6 +30,10 @@ import {
   resolveAdl2CodingSystem,
   type Adl2CodingOptions,
 } from "../parser/legacy/opt14_code_mapping.ts";
+import {
+  adl2CodingSystemOf,
+  isAdl14Artefact,
+} from "../parser/legacy/adl2_coding_system.ts";
 import type { Opt14ExportBindingMetadata } from "./adl14_downconvert.ts";
 import { JsonCanonicalSerializer } from "../serialization/json/json_canonical_serializer.ts";
 import { canonicalizeJson, sha256Hex } from "./jcs.ts";
@@ -204,14 +207,6 @@ interface LoadedSource {
   warnings: string[];
 }
 
-function inferAdl2CodingSystem(
-  opt: openehr_am.OPERATIONAL_TEMPLATE,
-): Adl2CodingSystem {
-  const rootId = opt.definition?.node_id;
-  if (rootId && /^id\d/i.test(rootId)) return "id-coded";
-  return DEFAULT_ADL2_CODING_SYSTEM;
-}
-
 function adl2HeaderIdentifiers(text: string): TemplateSourceIdentifiers {
   const m = /^\s*(?:operational_template|template|archetype)\s*\(([^)]*)\)/
     .exec(text);
@@ -262,7 +257,7 @@ function loadSource(
       return {
         opt,
         sourceFormat: "adl2-opt",
-        adl2CodingSystem: inferAdl2CodingSystem(opt),
+        adl2CodingSystem: adl2CodingSystemOf(opt) ?? DEFAULT_ADL2_CODING_SYSTEM,
         adl2HeaderIds: adl2HeaderIdentifiers(input),
         warnings,
       };
@@ -272,7 +267,7 @@ function loadSource(
         "Flatten an ADL2 source template first (TemplateWorkspace.resolveOperational).",
     );
   }
-  if (hasAdl14NodeIds(input)) {
+  if (isAdl14Artefact(input)) {
     const up = upconvertOpt14ToAdl2(input, options.opt14Header, options);
     return {
       opt: up.operationalTemplate,
@@ -286,7 +281,7 @@ function loadSource(
   return {
     opt: input,
     sourceFormat: "adl2-opt",
-    adl2CodingSystem: inferAdl2CodingSystem(input),
+    adl2CodingSystem: adl2CodingSystemOf(input) ?? DEFAULT_ADL2_CODING_SYSTEM,
     adl2HeaderIds: {},
     warnings,
   };

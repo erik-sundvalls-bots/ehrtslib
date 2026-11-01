@@ -27,6 +27,24 @@ export function idToAtCode(code: string | undefined | null): string {
   return `at${first}${m[3] ?? ""}`;
 }
 
+/**
+ * Node id as the at-code RM data carries in `archetype_node_id` and AQL
+ * paths: id-codes map by {@link idToAtCode} (`id1` → `at0000`,
+ * `id1.1` → `at0000.1`); at-codes and other ids are returned unchanged.
+ */
+export function nodeIdToAtCode(nodeId: string | undefined | null): string {
+  if (!nodeId) return "";
+  return /^id\d/i.test(nodeId) ? idToAtCode(nodeId) : nodeId;
+}
+
+/** True when two node ids name the same node in either ADL2 coding system. */
+export function nodeIdsMatch(a: unknown, b: unknown): boolean {
+  if (a == null || b == null || a === "" || b === "") return false;
+  const sa = String(a).trim();
+  const sb = String(b).trim();
+  return sa === sb || nodeIdToAtCode(sa) === nodeIdToAtCode(sb);
+}
+
 /** Term table shape: language → code → term (text/description/…). */
 export type Adl2TermTable = Record<string, Record<string, Record<string, unknown> | undefined> | undefined>;
 

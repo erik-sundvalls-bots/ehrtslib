@@ -3,7 +3,7 @@
  */
 
 import * as openehr_am from "../openehr_am.ts";
-import { adlNodeIdToAtCode } from "../../validation/archetype_path_resolver.ts";
+import { nodeIdToAtCode } from "../../generation/id_to_at_code.ts";
 
 export interface AomPathMatch {
   object: openehr_am.C_OBJECT;
@@ -12,28 +12,18 @@ export interface AomPathMatch {
   childIndex?: number;
 }
 
-function normalizeNodeId(nodeId: string): string[] {
-  const trimmed = nodeId.trim();
-  const variants = new Set<string>([trimmed]);
-  const at = /^at(\d+)$/i.exec(trimmed);
-  if (at) {
-    const n = parseInt(at[1], 10);
-    variants.add(`id${n}`);
-    variants.add(`at${String(n).padStart(4, "0")}`);
-  }
-  const id = /^id(\d+(?:\.\d+)*)$/i.exec(trimmed);
-  if (id) {
-    variants.add(`at${id[1].replace(/\./g, "").padStart(4, "0")}`);
-    variants.add(adlNodeIdToAtCode(trimmed));
-  }
-  return [...variants];
-}
-
+/**
+ * Node ids match across ADL2 coding systems (`id5` ↔ `at0004`). Short
+ * at-codes (`at5`) also match their zero-padded form (`at0005`).
+ */
 function nodeIdsMatch(a?: string, b?: string): boolean {
   if (!a || !b) return false;
-  const va = normalizeNodeId(a);
-  const vb = normalizeNodeId(b);
-  return va.some((x) => vb.includes(x));
+  const norm = (s: string) => {
+    const t = nodeIdToAtCode(s.trim());
+    const short = /^at(\d{1,3})((?:\.\d+)*)$/i.exec(t);
+    return short ? `at${short[1].padStart(4, "0")}${short[2]}` : t;
+  };
+  return norm(a) === norm(b);
 }
 
 function parsePathSegment(segment: string): { attrName?: string; nodeId?: string } {

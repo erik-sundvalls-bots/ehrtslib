@@ -21,6 +21,10 @@ import {
   applyRmOverlayOdin,
 } from "./aom_odin_sections.ts";
 import * as openehr_am from "../am/openehr_am.ts";
+import {
+  adl2CodingVersionWarning,
+  type CodedArtefact,
+} from "./legacy/adl2_coding_system.ts";
 import * as openehr_base from "../base/openehr_base.ts";
 
 /**
@@ -53,6 +57,12 @@ export class ADL2Parser {
     this.tokens = tokens;
   }
 
+  /** Warn (not fail) on an at-coded artefact with an ADL 2.0–2.3 header. */
+  private warnCodingVersion(artefact: CodedArtefact): void {
+    const warning = adl2CodingVersionWarning(artefact);
+    if (warning) this.warnings.push(warning);
+  }
+
   /**
    * Parse ADL2 text from tokens
    */
@@ -64,10 +74,12 @@ export class ADL2Parser {
     const keyword = this.peek().type;
     if (keyword === TokenType.TEMPLATE) {
       const template = this.parseTemplate();
+      this.warnCodingVersion(template);
       return { kind: "template", template, errors: this.errors, warnings: this.warnings };
     }
     if (keyword === TokenType.OPERATIONAL_TEMPLATE) {
       const operationalTemplate = this.parseOperationalTemplate();
+      this.warnCodingVersion(operationalTemplate);
       return {
         kind: "operational_template",
         operationalTemplate,
@@ -77,6 +89,7 @@ export class ADL2Parser {
     }
     if (keyword === TokenType.ARCHETYPE) {
       const archetype = this.parseArchetype();
+      this.warnCodingVersion(archetype);
       return { kind: "archetype", archetype, errors: this.errors, warnings: this.warnings };
     }
 

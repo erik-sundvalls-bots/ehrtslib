@@ -3,6 +3,7 @@
  */
 
 import { TypeRegistry } from "../common/type_registry.ts";
+import { nodeIdsMatch } from "../../generation/id_to_at_code.ts";
 import { hasRmType, isSubtypeOf } from "../../meta/mod.ts";
 import type { WebTemplateNode } from "./types.ts";
 
@@ -35,14 +36,6 @@ function rmProp(obj: unknown, key: string): unknown {
   return undefined;
 }
 
-function normalizeNodeId(id: string): string {
-  if (/^id\d/i.test(id)) {
-    const digits = id.replace(/^id/i, "").replace(/\./g, "");
-    return `at${digits.padStart(4, "0")}`;
-  }
-  return id;
-}
-
 /**
  * True for RM types known not to be LOCATABLE (e.g. ISM_TRANSITION). They have
  * no archetype_node_id, so a template path predicate cannot be checked on them.
@@ -57,12 +50,6 @@ function singleMatchesNodeId(obj: unknown, nodeId: string): boolean {
   const id = rmProp(obj, "archetype_node_id");
   if (id == null || id === "") return isNonLocatable(obj);
   return nodeIdsMatch(id, nodeId);
-}
-
-function nodeIdsMatch(a: unknown, b: string): boolean {
-  if (a == null) return false;
-  const sa = String(a);
-  return sa === b || normalizeNodeId(sa) === normalizeNodeId(b);
 }
 
 function pickByNodeId(arr: unknown[], nodeId: string): unknown {

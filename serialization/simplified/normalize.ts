@@ -1,3 +1,6 @@
+/** Node id → at-code for paths, by the ADL2 spec rule (`id1` → `at0000`). */
+export { nodeIdToAtCode } from "../../generation/id_to_at_code.ts";
+
 /**
  * Web Template node id normalisation, following the "Node ID Generation
  * Rules" of the ITS-REST simplified formats specification:
@@ -15,16 +18,6 @@ export function normalizeWebTemplateId(text: string): string {
   if (!id) id = "id";
   if (/^\d/.test(id)) id = `a${id}`;
   return id;
-}
-
-export function nodeIdToAtCode(nodeId?: string): string {
-  if (!nodeId) return "";
-  const m = /^id(\d+(?:\.\d+)*)$/i.exec(nodeId);
-  if (m) {
-    const digits = m[1].replace(/\./g, "");
-    return `at${digits.padStart(4, "0")}`;
-  }
-  return nodeId;
 }
 
 /**

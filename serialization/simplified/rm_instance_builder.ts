@@ -3,6 +3,7 @@
  */
 
 import { hasRmType, isSubtypeOf } from "../../meta/mod.ts";
+import { nodeIdsMatch } from "../../generation/id_to_at_code.ts";
 
 type RmObject = Record<string, unknown>;
 
@@ -37,17 +38,6 @@ const ARRAY_ATTRS = new Set([
   "activities",
   "rows",
 ]);
-
-function nodeIdsMatch(a: unknown, b: string): boolean {
-  if (a == null) return false;
-  const sa = String(a);
-  if (sa === b) return true;
-  if (/^id\d/i.test(sa)) {
-    const digits = sa.replace(/^id/i, "").replace(/\./g, "");
-    return `at${digits.padStart(4, "0")}` === b;
-  }
-  return false;
-}
 
 function findOrCreateInArray(
   arr: RmObject[],

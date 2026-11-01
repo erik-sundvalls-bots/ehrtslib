@@ -38,13 +38,23 @@ export {
 } from "./legacy/mod.ts";
 export {
   ARCHETYPE_VALUE_SETS_KEY,
-  hasAdl14NodeIds,
   type Opt14Header,
   type Opt14UpconversionResult,
   type Opt14ValueSet,
   readOpt14Header,
   upconvertOpt14ToAdl2,
 } from "./legacy/opt14_upconvert.ts";
+export {
+  adl2CodingSystemOf,
+  adl2CodingVersionWarning,
+  adl2VersionFor,
+  AT_CODED_ADL_VERSION,
+  type CodedArtefact,
+  isAdl14Artefact,
+  isSyntheticNodeId,
+  markSyntheticNodeId,
+  SYNTHETIC_NODE_ID_KEY,
+} from "./legacy/adl2_coding_system.ts";
 export {
   type Adl2CodingOptions,
   type Adl2CodingSystem,

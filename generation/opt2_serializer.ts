@@ -32,7 +32,12 @@ import {
   type Adl2CodingOptions,
   opt14NodeIdToAdl2,
   opt14TerminologyKeyToAdl2,
+  resolveAdl2CodingSystem,
 } from "../parser/legacy/opt14_code_mapping.ts";
+import {
+  adl2CodingSystemOf,
+  adl2VersionFor,
+} from "../parser/legacy/adl2_coding_system.ts";
 
 /** Options for {@link OPT2Serializer.serializeOperationalTemplate}. */
 export interface Opt2SerializeOptions extends Adl2CodingOptions {
@@ -119,7 +124,12 @@ export class OPT2Serializer extends ADL2Serializer {
 
     const indent = this.config.indent || "    ";
     let adl = "operational_template";
-    const adlVer = options?.adlVersion ?? "2.0.5";
+    // id-coded input stays id-coded; 1.4 / at-coded nodes are written in the
+    // requested coding system (at-coded by default).
+    const outCoding = adl2CodingSystemOf(working) === "id-coded"
+      ? "id-coded"
+      : resolveAdl2CodingSystem(options);
+    const adlVer = options?.adlVersion ?? adl2VersionFor(outCoding, "2.0.5");
     const rmRel = options?.rmRelease ?? working.rm_release ?? "1.0.4";
     adl += ` (adl_version=${adlVer}; rm_release=${rmRel})`;
     adl += "\n";

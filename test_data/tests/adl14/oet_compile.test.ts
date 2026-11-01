@@ -13,7 +13,7 @@ const MINIMAL_OET = `<?xml version="1.0"?>
 <template xmlns="openEHR/v1/Template">
   <name>simple_observation_hide_element</name>
   <definition archetype_id="openEHR-EHR-OBSERVATION.simple_test.v1.0.0" concept_name="Simple Observation">
-    <Rule path="/data[at0002]/events[at0003]/data[at0004]/items[at0005]" max="0" />
+    <Rule path="/data[at0001]/events[at0002]/data[at0003]/items[at0004]" max="0" />
   </definition>
 </template>`;
 
@@ -29,7 +29,7 @@ Deno.test("compileOetToOperational - max=0 rule on simple_observation", async ()
   );
 
   const elementPath =
-    "/data[at0002]/events[at0003]/data[at0004]/items[at0005]";
+    "/data[at0001]/events[at0002]/data[at0003]/items[at0004]";
   const match = resolveAomPath(operationalTemplate.definition!, elementPath);
   assert(match, `expected element at ${elementPath}; warnings: ${warnings.join("; ")}`);
   assertEquals(match.object.occurrences?.upper, 0);

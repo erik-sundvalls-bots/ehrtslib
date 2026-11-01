@@ -20,6 +20,7 @@ import {
 import type { WebTemplate, WebTemplateNode } from "./types.ts";
 import type { FlatRmDefaultIssue } from "./flat_rm_defaults.ts";
 import { actionArchetypeIdDefault, fixedCategoryCode } from "./flavor.ts";
+import { nodeIdsMatch } from "../../generation/id_to_at_code.ts";
 
 type RmObject = Record<string, unknown>;
 type Primitive = string | number | boolean;
@@ -141,17 +142,6 @@ function partyRef(id: Primitive, f: Record<string, Primitive>): RmObject {
   };
   if (f.id_namespace != null) ref.namespace = String(f.id_namespace);
   return ref;
-}
-
-function nodeIdsMatch(a: unknown, b: string): boolean {
-  if (a == null) return false;
-  const sa = String(a);
-  if (sa === b) return true;
-  const norm = (s: string) =>
-    /^id\d/i.test(s)
-      ? `at${s.replace(/^id/i, "").replace(/\./g, "").padStart(4, "0")}`
-      : s;
-  return norm(sa) === norm(b);
 }
 
 interface RawHit {

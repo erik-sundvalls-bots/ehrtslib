@@ -11,6 +11,7 @@ import { XMLParser } from "fast-xml-parser";
 import * as openehr_am from "../../am/openehr_am.ts";
 import * as openehr_base from "../../base/openehr_base.ts";
 import { clonePreservingPrototype } from "../../generation/opt2_trim.ts";
+import { adl2VersionFor, markSyntheticNodeId } from "./adl2_coding_system.ts";
 import {
   COMPONENT_TERM_DEFINITIONS_KEY,
   TERM_ARCHETYPE_SCOPE_KEY,
@@ -151,14 +152,6 @@ export function readOpt14Header(xml: string): Opt14Header {
     header.description = desc;
   }
   return header;
-}
-
-/** True when the template's node ids are ADL 1.4 at-codes (root `at0000`). */
-export function hasAdl14NodeIds(opt: openehr_am.OPERATIONAL_TEMPLATE): boolean {
-  const rootId = opt.definition?.node_id;
-  if (isAdl14AtCode(rootId)) return true;
-  if (rootId && /^id\d/.test(rootId)) return false;
-  return opt.adl_version === "1.4";
 }
 
 type Meta = Record<string, unknown>;
@@ -412,6 +405,7 @@ export function upconvertOpt14ToAdl2(
       if (isAdl14AtCode(id)) obj.node_id = mapper.nodeIdToAdl2(id);
       else if (!id && underAttribute) {
         obj.node_id = minterFor(scope).nextNodeId();
+        markSyntheticNodeId(obj);
         mintedIdCodes++;
       }
       const fallback = meta[TERM_NAME_FALLBACK_NODE_ID_KEY];
@@ -491,7 +485,7 @@ export function upconvertOpt14ToAdl2(
     ann.documentation = out;
   }
 
-  opt.adl_version = "2.0.5";
+  opt.adl_version = adl2VersionFor(adl2CodingSystem, "2.0.5");
   if (header?.templateId) opt.template_id = header.templateId;
   if (header?.description) opt.description = header.description;
 
