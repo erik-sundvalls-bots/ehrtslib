@@ -15,6 +15,7 @@ import {
 } from "../serialization/common/json_source_index.ts";
 import { UcumService } from "../term/ucum_service.ts";
 import { IntervalValidator } from "./interval_validator.ts";
+import { instanceRmType } from "./rm_type.ts";
 import { RMSpecificationValidator } from "./rm_specification_validator.ts";
 import { InvariantEvaluator } from "./invariant_evaluator.ts";
 import {
@@ -594,7 +595,7 @@ export class TemplateValidator {
     if (Array.isArray(rmValue)) return;
 
     const rec = rmValue as Record<string, unknown>;
-    const type = typeof rec._type === "string" ? rec._type : undefined;
+    const type = instanceRmType(rec);
     if (type === "DV_QUANTITY" && !this.ucumPathsChecked.has(path)) {
       const msgs = this.validateUcumQuantity(rec, path, undefined);
       errors.push(...msgs.filter((m) => m.severity === "error"));
