@@ -372,12 +372,17 @@ export class FlatDeserializer {
     if (mode === "ignore") return;
     for (const path of unknownAttrs) {
       const computed = /\/_?offset(:\d+)?$/.test(path) && /EVENT$/.test(node.rmType);
+      const field = /\|([^/]*)$/.exec(path)?.[1];
       this.issues.push({
-        path: `${node.aqlPath}${path}`,
+        path: `${node.aqlPath}${field === "" ? path.slice(0, -1) : path}`,
         severity: computed || mode === "warning" ? "warning" : "error",
         kind: "unknown-key",
         message: computed
           ? "EVENT.offset is computed (time − HISTORY.origin), not stored; ignored"
+          : field === ""
+          ? `RM type ${node.rmType} has no bare FLAT value; ignored (use its fields or _<attribute> paths)`
+          : field !== undefined
+          ? `RM type ${node.rmType} has no FLAT field "|${field}"; ignored`
           : `RM type ${node.rmType} has no attribute for "${path.split("/").pop()}"; ignored`,
       });
     }
@@ -577,6 +582,7 @@ export class FlatDeserializer {
         path: node.aqlPath,
         codedTextMismatch: this.options.codedTextMismatch,
         codedTextDisplayValue: this.options.codedTextDisplayValue,
+        unknownKeys: this.options.unknownKeys ?? "error",
       }),
       node.rmType,
       node.nodeId,

@@ -196,6 +196,7 @@ A path segment `_<attr>` addresses an RM attribute of the object at that path (s
 - `EVENT.offset` is computed (time − `HISTORY.origin`). It is not written; `_offset` on input is ignored with a warning.
 - ehrtslib conventions for values the spec has no form for: `|_type` when the RM type is not the one the attribute type or the keys imply, and `|raw` (canonical JSON) as a last resort.
 - Attributes that are not RM attributes of the object, or that the template already covers (such as OBSERVATION `data`: there is no `…/data/any_event` path), are `unknown-key` issues with the `unknownKeys` severity.
+- So is a field key that sets nothing: a suffix the type has no FLAT form for, or a bare key on a type without a primitive `value`. The spec has no FLAT form for DV_SCALE, DV_STATE or DV_PARAGRAPH, so `|code`/`|ordinal` on DV_SCALE and a bare key on DV_STATE or DV_PARAGRAPH are reported; use `_value`, `_symbol|code`, `_is_terminal`, `_items:0` and so on.
 
 Reading also accepts an attribute name without `_` when no template node has that id (the spec examples write `expiry_time`), and `|scheme` or `|id_scheme` on OBJECT_REF.
 
