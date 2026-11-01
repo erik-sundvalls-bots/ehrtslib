@@ -27,3 +27,21 @@ Included in `test_data/scripts/download_fixtures.ts`.
 - ADL 1.4 OPT → web template / validation pipeline (Phase 6b PRD)
 - Instance generation against legacy templates in demo app Template tab
 - Cross-check with Archie JVM flattener where applicable
+
+## Local additions
+
+Some files are not from openEHR_SDK and are not refreshed by the download
+script:
+
+- `multilingual_en_sv_de.opt`: a hand-written ehrtslib test fixture.
+- `simple-diagnose-and-vitals.opt`: the "Simple vitals" template by Erik
+  Sundvall, from
+  [Ehrlibs/openEHR-model-examples](https://github.com/Ehrlibs/openEHR-model-examples)
+  (`local/theme-packs/simple-diagnose-and-vitals/`, commit `40573df`), also
+  used by intehrgrator. That repository has no licence file and the template's
+  `licence` field is empty; the included archetypes come from the openEHR CKM.
+  ehrtslib adds template annotations (`ui.section`, `a.id`,
+  `am.symbol_binding`) at the end of the file so the Contribution Builder
+  address examples in `docs/maintainers/contribution-builder-design.md`
+  have a real template. `a.id = rate` is set on both Respiration and Pulse on
+  purpose, to show a non-unique value.
