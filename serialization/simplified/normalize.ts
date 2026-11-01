@@ -34,3 +34,61 @@ export function joinAqlPath(base: string, segment: string): string {
   if (!base || base === "/") return `/${seg}`;
   return `${base.replace(/\/$/, "")}/${seg}`;
 }
+
+/** One step of an AQL path: `attr`, `attr[nodeId]` or `attr[nodeId and name/value='…']`. */
+export interface AqlPathSegment {
+  attr: string;
+  nodeId?: string;
+  /** Value of a `name/value` predicate (Web Template paths of name-constrained siblings). */
+  nameValue?: string;
+  /** The segment as written, with its leading `/`. */
+  raw: string;
+}
+
+const PREDICATE_RE =
+  /^\s*([^\s,]+)\s*(?:(?:,|\band\s+name\/value\s*=)\s*(['"])((?:(?!\2).)*)\2)?\s*$/s;
+
+/**
+ * Split an AQL path into segments. A `/` inside a `[…]` predicate (as in
+ * `items[at0003 and name/value='Identifierare']`) does not split.
+ */
+export function aqlPathSegments(path: string): AqlPathSegment[] {
+  const parts: string[] = [];
+  let buf = "";
+  let depth = 0;
+  let quote: string | null = null;
+  for (const ch of path) {
+    if (quote) {
+      buf += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (depth > 0 && (ch === "'" || ch === '"')) quote = ch;
+    else if (ch === "[") depth++;
+    else if (ch === "]") depth = Math.max(0, depth - 1);
+    else if (ch === "/" && depth === 0) {
+      if (buf) parts.push(buf);
+      buf = "";
+      continue;
+    }
+    buf += ch;
+  }
+  if (buf) parts.push(buf);
+  const out: AqlPathSegment[] = [];
+  for (const part of parts) {
+    const m = /^([^[]+)(?:\[(.*)\])?$/s.exec(part);
+    if (!m) continue;
+    const seg: AqlPathSegment = { attr: m[1], raw: `/${part}` };
+    if (m[2] !== undefined) {
+      const p = PREDICATE_RE.exec(m[2]);
+      if (p) {
+        seg.nodeId = p[1];
+        if (p[3] !== undefined) seg.nameValue = p[3];
+      } else {
+        seg.nodeId = m[2].trim();
+      }
+    }
+    out.push(seg);
+  }
+  return out;
+}

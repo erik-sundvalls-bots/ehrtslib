@@ -12,7 +12,11 @@
 
 import { templateAttributes } from "./flat_serializer.ts";
 import type { FlatPayload, WebTemplate, WebTemplateNode } from "./types.ts";
-import { normalizeWebTemplateId, templateRootId } from "./normalize.ts";
+import {
+  aqlPathSegments,
+  normalizeWebTemplateId,
+  templateRootId,
+} from "./normalize.ts";
 import {
   assignAtAqlPath,
   ensureAtAqlPath,
@@ -87,7 +91,7 @@ function parseSegments(basePath: string): ParsedSegment[] {
 }
 
 function aqlSegmentCount(aqlPath: string): number {
-  return aqlPath.replace(/\/+/g, "/").match(/\/[^/]+/g)?.length ?? 0;
+  return aqlPathSegments(aqlPath).length;
 }
 
 function flatLanguage(flat: FlatPayload, roots: Set<string>): string | undefined {
@@ -459,7 +463,7 @@ export class FlatDeserializer {
     const leafPath = group.node.aqlPath;
     const collapsed = this.webTemplate.tree.collapsed;
     if (collapsed) {
-      const segs = leafPath.match(/\/[^/]+/g) ?? [];
+      const segs = aqlPathSegments(leafPath).map((s) => s.raw);
       for (let d = 1; d <= segs.length; d++) {
         const entry = collapsed[segs.slice(0, d).join("")];
         if (entry) hints[d] ??= entry.rmType;
@@ -468,7 +472,8 @@ export class FlatDeserializer {
     for (const node of lineage) {
       if (node.rmType !== "OBSERVATION") continue;
       const depth = aqlSegmentCount(node.aqlPath);
-      const rest = leafPath.slice(node.aqlPath.length).match(/\/[^/]+/g) ?? [];
+      const rest = aqlPathSegments(leafPath.slice(node.aqlPath.length))
+        .map((s) => s.raw);
       if (rest[0]?.startsWith("/data")) hints[depth + 1] ??= "HISTORY";
       if (rest[1]?.startsWith("/events")) {
         const eventPath = node.aqlPath + rest[0] + rest[1];

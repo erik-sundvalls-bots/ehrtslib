@@ -27,6 +27,7 @@
 
 import * as openehr_am from "../../am/openehr_am.ts";
 import * as openehr_base from "../../base/openehr_base.ts";
+import { aqlPathSegments } from "./normalize.ts";
 import type {
   QuantityItemInterval,
   QuantityItemRuntime,
@@ -82,11 +83,7 @@ interface AqlSegment {
 }
 
 function parseAqlPath(aqlPath: string): AqlSegment[] {
-  const segments = aqlPath.replace(/\/+/g, "/").match(/\/[^/]+/g) ?? [];
-  return segments.map((raw) => {
-    const m = /^\/([^[]+)(?:\[([^\]]+)\])?$/.exec(raw)!;
-    return { attr: m[1], nodeId: m[2] };
-  });
+  return aqlPathSegments(aqlPath).map(({ attr, nodeId }) => ({ attr, nodeId }));
 }
 
 function isArchetypeId(nodeId?: string): boolean {

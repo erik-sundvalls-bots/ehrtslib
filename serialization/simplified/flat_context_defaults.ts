@@ -11,6 +11,8 @@
  */
 
 import { hasRmType, isSubtypeOf } from "../../meta/mod.ts";
+import { nodeIdsMatch } from "../../generation/id_to_at_code.ts";
+import { aqlPathSegments } from "./normalize.ts";
 import {
   COMPOSITION_CATEGORY_GROUP,
   openEhrGroupCode,
@@ -20,7 +22,6 @@ import {
 import type { WebTemplate, WebTemplateNode } from "./types.ts";
 import type { FlatRmDefaultIssue } from "./flat_rm_defaults.ts";
 import { actionArchetypeIdDefault, fixedCategoryCode } from "./flavor.ts";
-import { nodeIdsMatch } from "../../generation/id_to_at_code.ts";
 
 type RmObject = Record<string, unknown>;
 type Primitive = string | number | boolean;
@@ -154,13 +155,10 @@ interface RawHit {
 
 /** Resolve a relative AQL path without unwrapping ELEMENT values. */
 function resolveRaw(start: RmObject, relPath: string): RawHit[] {
-  const segments = relPath.replace(/\/+/g, "/").match(/\/[^/]+/g) ?? [];
+  const segments = aqlPathSegments(relPath);
   let hits: RawHit[] = [{ value: start, via: [], viaPaths: [] }];
   let prefix = "";
-  for (const raw of segments) {
-    const m = /^\/([^[]+)(?:\[([^\]]+)\])?$/.exec(raw);
-    if (!m) return [];
-    const [, attr, nodeId] = m;
+  for (const { attr, nodeId, nameValue, raw } of segments) {
     const next: RawHit[] = [];
     for (const hit of hits) {
       const v = hit.value[attr];
@@ -172,7 +170,9 @@ function resolveRaw(start: RmObject, relPath: string): RawHit[] {
         const rec = item as RmObject;
         if (
           nodeId && rec.archetype_node_id != null &&
-          !nodeIdsMatch(rec.archetype_node_id, nodeId)
+          (!nodeIdsMatch(rec.archetype_node_id, nodeId) ||
+            (nameValue !== undefined &&
+              (rec.name as RmObject | undefined)?.value !== nameValue))
         ) continue;
         next.push({ value: rec, via, viaPaths });
       }

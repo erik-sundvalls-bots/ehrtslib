@@ -582,6 +582,10 @@ export function buildDvValue(
     let value = source[field.suffix];
     // `|value` is a read alias for the bare suffix
     if (value == null && field.suffix === "") value = source.value;
+    // DV_IDENTIFIER: the bare key is a read alias for `|id` (as EHRbase reads it)
+    if (value == null && resolved === "DV_IDENTIFIER" && field.suffix === "id") {
+      value = source[""];
+    }
     if (value == null) continue;
     const coerced = coerce(value, field.kind);
     if (coerced === undefined) continue;

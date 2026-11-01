@@ -12,6 +12,8 @@ export type {
 } from "./types.ts";
 
 export {
+  type AqlPathSegment,
+  aqlPathSegments,
   joinAqlPath,
   nodeIdToAtCode,
   normalizeWebTemplateId,

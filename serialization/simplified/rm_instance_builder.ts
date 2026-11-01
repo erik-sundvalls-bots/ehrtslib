@@ -4,6 +4,7 @@
 
 import { hasRmType, isSubtypeOf } from "../../meta/mod.ts";
 import { nodeIdsMatch } from "../../generation/id_to_at_code.ts";
+import { aqlPathSegments } from "./normalize.ts";
 
 type RmObject = Record<string, unknown>;
 
@@ -11,11 +12,28 @@ type RmObject = Record<string, unknown>;
  * New RM object of `rmType`. Only LOCATABLE types get `archetype_node_id`;
  * PATHABLE-only types such as ISM_TRANSITION or EVENT_CONTEXT do not.
  */
-function newRmObject(rmType: string, nodeId: string | null): RmObject {
+function newRmObject(
+  rmType: string,
+  nodeId: string | null,
+  nameValue?: string,
+): RmObject {
   if (hasRmType(rmType) && !isSubtypeOf(rmType, "LOCATABLE")) {
     return { _type: rmType };
   }
-  return { _type: rmType, archetype_node_id: nodeId };
+  const obj: RmObject = { _type: rmType, archetype_node_id: nodeId };
+  if (nameValue !== undefined) obj.name = { _type: "DV_TEXT", value: nameValue };
+  return obj;
+}
+
+/** Node id matches, and the `name/value` predicate when the path has one. */
+function matchesNode(
+  item: RmObject,
+  nodeId: string,
+  nameValue: string | undefined,
+): boolean {
+  if (!nodeIdsMatch(item.archetype_node_id, nodeId)) return false;
+  if (nameValue === undefined) return true;
+  return (item.name as RmObject | undefined)?.value === nameValue;
 }
 
 const ATTR_RM_TYPE: Record<string, string> = {
@@ -44,16 +62,15 @@ function findOrCreateInArray(
   nodeId: string | undefined,
   rmType: string,
   occurrence: number,
+  nameValue?: string,
 ): RmObject {
   if (nodeId) {
-    const matches = arr.filter((item) =>
-      nodeIdsMatch(item.archetype_node_id, nodeId)
-    );
+    const matches = arr.filter((item) => matchesNode(item, nodeId, nameValue));
     if (occurrence < matches.length) return matches[occurrence];
     // Create missing instances up to the requested occurrence
     let created: RmObject | undefined;
     for (let i = matches.length; i <= occurrence; i++) {
-      created = newRmObject(rmType, nodeId);
+      created = newRmObject(rmType, nodeId, nameValue);
       arr.push(created);
     }
     return created!;
@@ -70,15 +87,22 @@ function ensureChild(
   nodeId: string | undefined,
   rmType: string,
   occurrence: number,
+  nameValue?: string,
 ): RmObject {
   const existing = parent[attr];
   if (Array.isArray(existing)) {
-    return findOrCreateInArray(existing as RmObject[], nodeId, rmType, occurrence);
+    return findOrCreateInArray(
+      existing as RmObject[],
+      nodeId,
+      rmType,
+      occurrence,
+      nameValue,
+    );
   }
   if (existing && typeof existing === "object" && occurrence === 0) {
     return existing as RmObject;
   }
-  const child: RmObject = newRmObject(rmType, nodeId ?? null);
+  const child: RmObject = newRmObject(rmType, nodeId ?? null, nameValue);
   if (ARRAY_ATTRS.has(attr) || occurrence > 0) {
     const arr: RmObject[] = existing && typeof existing === "object"
       ? [existing as RmObject]
@@ -120,17 +144,13 @@ export function assignAtAqlPath(
   occurrences?: OccurrenceHints,
   rmTypes?: RmTypeHints,
 ): void {
-  const normalized = aqlPath.replace(/\/+/g, "/");
-  const segments = normalized.match(/\/[^/]+/g);
-  if (!segments?.length) return;
+  const segments = aqlPathSegments(aqlPath);
+  if (!segments.length) return;
 
   let current: RmObject = root;
 
   for (let si = 0; si < segments.length; si++) {
-    const raw = segments[si];
-    const m = /^\/([^[]+)(?:\[([^\]]+)\])?$/.exec(raw);
-    if (!m) continue;
-    const [, attr, nodeId] = m;
+    const { attr, nodeId, nameValue } = segments[si];
     const isLast = si === segments.length - 1;
     const occurrence = occurrences?.[si + 1] ?? 0;
 
@@ -152,18 +172,15 @@ export function assignAtAqlPath(
         // addressing the same RM node must not create duplicate elements.
         const matches = elemNodeId
           ? items.filter((it) =>
-            it._type === "ELEMENT" &&
-            nodeIdsMatch(it.archetype_node_id, elemNodeId)
+            it._type === "ELEMENT" && matchesNode(it, elemNodeId, nameValue)
           )
           : [];
         if (occurrence < matches.length) {
           matches[occurrence].value = leafValue;
         } else {
-          items.push({
-            _type: "ELEMENT",
-            archetype_node_id: elemNodeId,
-            value: leafValue,
-          });
+          const element = newRmObject("ELEMENT", elemNodeId, nameValue);
+          element.value = leafValue;
+          items.push(element);
         }
       } else if (isDataValue && attr === "item") {
         // ITEM_SINGLE.item is an ELEMENT, like ITEM_TREE/ITEM_LIST items.
@@ -191,13 +208,13 @@ export function assignAtAqlPath(
           current[attr] = leafValue;
         }
       } else {
-        ensureChild(current, attr, nodeId, leafRmType, occurrence);
+        ensureChild(current, attr, nodeId, leafRmType, occurrence, nameValue);
       }
       return;
     }
 
     const rmType = rmTypes?.[si + 1] ?? inferRmType(attr);
-    current = ensureChild(current, attr, nodeId, rmType, occurrence);
+    current = ensureChild(current, attr, nodeId, rmType, occurrence, nameValue);
   }
 }
 
@@ -214,17 +231,22 @@ export function ensureAtAqlPath(
   occurrences?: OccurrenceHints,
   rmTypes?: RmTypeHints,
 ): RmObject {
-  const segments = aqlPath.replace(/\/+/g, "/").match(/\/[^/]+/g);
-  if (!segments?.length) return root;
+  const segments = aqlPathSegments(aqlPath);
+  if (!segments.length) return root;
   let current: RmObject = root;
   for (let si = 0; si < segments.length; si++) {
-    const m = /^\/([^[]+)(?:\[([^\]]+)\])?$/.exec(segments[si]);
-    if (!m) continue;
-    const [, attr, nodeId] = m;
+    const { attr, nodeId, nameValue } = segments[si];
     const isLast = si === segments.length - 1;
     const occurrence = occurrences?.[si + 1] ?? 0;
     const type = isLast ? rmType : rmTypes?.[si + 1] ?? inferRmType(attr);
-    current = ensureChild(current, attr, isLast ? lastNodeId ?? nodeId : nodeId, type, occurrence);
+    current = ensureChild(
+      current,
+      attr,
+      isLast ? lastNodeId ?? nodeId : nodeId,
+      type,
+      occurrence,
+      nameValue,
+    );
   }
   return current;
 }
