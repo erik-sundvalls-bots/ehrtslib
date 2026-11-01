@@ -22,8 +22,19 @@ export interface FlatRmDefaultIssue {
   path: string;
   message: string;
   severity: "error" | "warning";
-  /** Set on issues raised under {@link CodedTextMismatch}. */
-  kind?: "coded-text-mismatch";
+  /**
+   * `coded-text-mismatch`: raised under {@link CodedTextMismatch}.
+   * `unknown-key`: a FLAT key that matches no Web Template node (see
+   * `unknownKeys`). `missing-mandatory`: an RM-mandatory value that is neither
+   * in the payload nor in `ctx/` and that no default filled. `context-rule`:
+   * ctx/ context keys ignored because the composition has no EVENT_CONTEXT
+   * (see docs/SIMPLIFIED_FORMATS.md "Event context").
+   */
+  kind?:
+    | "coded-text-mismatch"
+    | "unknown-key"
+    | "missing-mandatory"
+    | "context-rule";
 }
 
 /**
@@ -622,8 +633,6 @@ function fillIsmFromWebTemplate(
 ): void {
   // ISM_TRANSITION is PATHABLE, not LOCATABLE: it has no archetype_node_id.
   // The template variant is identified by careflow_step / current_state.
-  // Older data (or a |raw object) may still carry the key; drop it.
-  delete ism.archetype_node_id;
   const variant = inferFromCareflow(ism, ismWt);
 
   const currentWt = ismWt.children?.find((c) => c.id === "current_state");
