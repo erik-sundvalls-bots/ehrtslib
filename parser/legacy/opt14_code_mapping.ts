@@ -168,6 +168,9 @@ function mintAtNodeCode(n: number): string {
  * code already present in the scope (after mapping), then call {@link nextNodeId}
  * / {@link nextAc} in depth-first document order.
  */
+/** First number used for minted node ids (`at9000` / `id9000`). */
+export const MINTED_NODE_CODE_START = 9000;
+
 export class Opt14CodeMinter {
   private nodeCounter = 0;
   private acCounter = 0;
@@ -196,7 +199,9 @@ export class Opt14CodeMinter {
 
   /** Mint a new node id (id-code or at-code depending on coding system). */
   nextNodeId(): string {
-    this.nodeCounter += 1;
+    // Like Archie, minted node ids start at 9000 so they stay clear of the
+    // archetype's own codes (and of value codes, which share the at range).
+    this.nodeCounter = Math.max(this.nodeCounter + 1, MINTED_NODE_CODE_START);
     if (this.coding === "at-coded") return mintAtNodeCode(this.nodeCounter);
     return `id${this.nodeCounter}`;
   }

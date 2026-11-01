@@ -13,8 +13,12 @@ import {
   mapOriginalLanguage,
   mapTermDefinitions,
 } from "./odin_aom_mapper.ts";
-import type { OperationalTemplateWithTermScopes } from "../generation/term_scope.ts";
+import {
+  applyOperationalTemplateTermScopes,
+  type OperationalTemplateWithTermScopes,
+} from "../generation/term_scope.ts";
 import { CadlParser } from "./cadl_parser.ts";
+import { restoreSyntheticNodeIds } from "./synthetic_node_annotations.ts";
 import { RulesParser } from "./rules_parser.ts";
 import {
   applyAnnotationsOdin,
@@ -80,6 +84,17 @@ export class ADL2Parser {
     if (keyword === TokenType.OPERATIONAL_TEMPLATE) {
       const operationalTemplate = this.parseOperationalTemplate();
       this.warnCodingVersion(operationalTemplate);
+      // Nodes take their terms from the nearest archetype root's
+      // component_terminologies entry, as after OPT 1.4 parsing.
+      applyOperationalTemplateTermScopes(
+        operationalTemplate as OperationalTemplateWithTermScopes,
+      );
+      restoreSyntheticNodeIds(operationalTemplate);
+      const otherDetails = (operationalTemplate.description as { other_details?: unknown } | undefined)
+        ?.other_details as Record<string, unknown> | undefined;
+      if (typeof otherDetails?.template_id === "string") {
+        (operationalTemplate as { template_id?: string }).template_id = otherDetails.template_id;
+      }
       return {
         kind: "operational_template",
         operationalTemplate,

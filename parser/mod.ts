@@ -39,11 +39,26 @@ export {
 export {
   ARCHETYPE_VALUE_SETS_KEY,
   type Opt14Header,
+  type Opt14UpconversionOptions,
   type Opt14UpconversionResult,
   type Opt14ValueSet,
   readOpt14Header,
   upconvertOpt14ToAdl2,
 } from "./legacy/opt14_upconvert.ts";
+export {
+  type ArchetypeConversionLog,
+  type ConversionCodeReason,
+  type ConversionCreatedCode,
+  type ConversionRunLog,
+  type ConversionValueSet,
+  parseConversionRunLog,
+  serializeConversionRunLog,
+} from "./legacy/conversion_log.ts";
+export {
+  restoreSyntheticNodeIds,
+  SYNTHETIC_NODE_ID_ANNOTATION,
+  withSyntheticNodeIdAnnotations,
+} from "./synthetic_node_annotations.ts";
 export {
   adl2CodingSystemOf,
   adl2CodingVersionWarning,

@@ -81,7 +81,7 @@ Deno.test("OPT 1.4 code mapping — id-coded node ids, value codes, value-set co
   m.seen("id7.1");
   assertEquals(
     [m.nextNodeId(), m.nextNodeId(), m.nextAc()],
-    ["id13", "id14", "ac3"],
+    ["id9000", "id9001", "ac3"],
   );
 });
 
