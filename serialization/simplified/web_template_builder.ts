@@ -1480,7 +1480,11 @@ export class WebTemplateBuilder {
     idHint: string,
   ): WebTemplateNode {
     const rmType = obj.rm_type_name ?? "DV_TEXT";
-    const { min, max } = multiplicityBounds(obj.occurrences);
+    // ADL2 primitive constraints carry no occurrences; like the OPT 1.4
+    // C_CODE_PHRASE / C_PRIMITIVE_OBJECT they stand for exactly one value.
+    const { min, max } = !obj.occurrences && obj instanceof openehr_am.C_PRIMITIVE_OBJECT
+      ? { min: 1, max: 1 }
+      : multiplicityBounds(obj.occurrences);
     return this.decorateWithAnnotations({
       ...this.termFields(obj, idHint),
       rmType,

@@ -85,13 +85,13 @@ function primitiveFromAom(
     };
   }
   if (item instanceof openehr_am.C_STRING) {
+    const list = (item as { list?: string[] }).list;
+    if (list?.length) return { type: "string", list };
     const pattern = str((item as { pattern?: unknown }).pattern) ?? "";
     if (rm === "Integer" || rm === "Real") {
       return { type: "interval", expr: pattern };
     }
-    if (rm === "STRING") return { type: "string", pattern };
-    // Quoted string constraint(s); the cADL parser joins values with `|`.
-    return { type: "string", list: pattern.split("|") };
+    return { type: "string", pattern };
   }
   return undefined;
 }
