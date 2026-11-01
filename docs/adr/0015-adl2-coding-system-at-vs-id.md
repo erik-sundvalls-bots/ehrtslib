@@ -179,7 +179,7 @@ All six next-release items are done:
    files and one archetype), regenerated with `UPDATE_GOLDEN=1`.
 6. README and `docs/ADL_SUPPORT.md` "ADL2 coding systems".
 
-Known limits, not in scope here:
+Known limits, not in scope here (follow-up: [#252](https://github.com/ErikSundvall/ehrtslib/issues/252), with root causes and proposed fixes):
 
 - Minted node ids are not marked in ADL2 text. After writing and
   re-parsing, a node that had no id in OPT 1.4 (for example a nested

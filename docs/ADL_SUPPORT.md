@@ -201,6 +201,15 @@ ADL 2.4 (AM 2.4.0, not yet released) has two node coding systems ([ADL2, node id
 - **Choosing.** `adl2CodingSystem: "at-coded" | "id-coded"` on `upconvertOpt14ToAdl2`, `convertAdl14ToAdl2`, `OPT2Serializer.serializeOperationalTemplate` and `bindTemplate` picks the coding system of converted output. An id-coded input stays id-coded.
 - **Reading.** The ADL2 parser reads both. `adl2CodingSystemOf(artefact)` tells which one an archetype or template uses, from its root node id. `isAdl14Artefact` tells an OPT 1.4 (at-codes, no ADL 2 header) from at-coded ADL2. An at-coded artefact with an ADL 2.0–2.3 header parses with a warning, since AM 2.3 tools would read it as id-coded.
 - **Data paths.** RM data always carries at-codes in `archetype_node_id`. Web Template, FLAT, STRUCTURED and AQL paths are at-codes for both coding systems; id-codes map by the ADL2 rule (`id1` → `at0000`, `id5` → `at0004`, `id1.1` → `at0000.1`; `nodeIdToAtCode`). A template up-converted from OPT 1.4 gives the same Web Template as the OPT 1.4 in either coding system. Node ids minted on up-conversion (for OPT 1.4 nodes without one) are marked on the in-memory objects and left out of paths; after writing and re-parsing ADL2 text they are ordinary node ids.
+- **OPT2 text is not yet a full replacement for the OPT 1.4** ([#252](https://github.com/ErikSundvall/ehrtslib/issues/252)). An up-converted template written with `OPT2Serializer` and parsed again can differ from the original:
+  - an unbounded `*` occurrence is read as 1, so a repeatable EVENT can drop out of FLAT paths;
+  - names can come from the wrong archetype;
+  - the `language` section is missing;
+  - name constraints of same-archetype siblings are lost;
+  - minted node ids appear in paths.
+
+  A template id with spaces (for example `IDCR - Problem List.v1`) is written as is and does not parse. Until #252 is fixed, build Web Templates, FLAT and CDR uploads from the OPT 1.4 or the in-memory up-converted template, not from re-parsed OPT2 text.
+- **id-coded node ids that collide with value codes** ([#252](https://github.com/ErikSundvall/ehrtslib/issues/252)). The OPT 1.4 export moves such a node to `at9000+`, but Web Template and FLAT paths use the plain mapping, so the two can differ. This affects only natively authored id-coded templates; at-coded templates and Archie-converted archetypes are not affected.
 
 ## ADL 1.4 conversion
 
