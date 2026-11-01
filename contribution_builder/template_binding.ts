@@ -14,6 +14,7 @@
  * {@link assertTemplateBindingUnchanged} throws a typed error.
  */
 
+import { adl14CodeMapWarnings } from "../generation/adl14_code_map_cache.ts";
 import type * as openehr_am from "../am/openehr_am.ts";
 import { ADL2Parser } from "../parser/adl2_parser.ts";
 import { ADL2Tokenizer } from "../parser/adl2_tokenizer.ts";
@@ -504,6 +505,11 @@ export async function bindTemplate(
   options: BindTemplateOptions = {},
 ): Promise<BoundTemplate> {
   const src = loadSource(input, options);
+  // id-coded value codes that collide with a node id get another ADL 1.4
+  // code (#252): FLAT/STRUCTURED, RM data and the OPT 1.4 export use it.
+  if (!options.opt14Export) {
+    src.warnings.push(...adl14CodeMapWarnings(src.opt).map((w) => `ADL 1.4 codes: ${w}`));
+  }
   const identity = identityOf(src);
   if (!identity.templateId) {
     src.warnings.push("Template has no template id or archetype id");

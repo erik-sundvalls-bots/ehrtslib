@@ -16,7 +16,8 @@
  * otherwise the plain shift is used and a warning is returned.
  */
 
-import { idToAtCode } from "../generation/id_to_at_code.ts";
+import { externalCodeOf, idToAtCode } from "../generation/id_to_at_code.ts";
+import { adl14CodeFor } from "../generation/adl14_code_map_cache.ts";
 import {
   opt14NodeIdToAdl2,
   opt14ValueCodeToAdl2,
@@ -38,6 +39,13 @@ export interface Adl14DownconversionOptions {
    * is under). Codes not in the map fall back to the plain shift.
    */
   codeMap?: (archetypeId: string, code: string) => string | undefined;
+  /**
+   * The id-coded ADL2 template the data was built from. Codes not in
+   * {@link codeMap} then follow its per-archetype ADL 1.4 code map (#252):
+   * a value code that collides with a node id moves or is written back to
+   * its external code, as in the OPT 1.4 export.
+   */
+  operationalTemplate?: object;
 }
 
 export interface Adl14DownconversionResult {
@@ -109,6 +117,7 @@ export function resolveAdl14DownconversionOptions(
     codeMap: (archetypeId, code) =>
       draft?.codeMap?.(archetypeId, code) ??
       fromBinding.codeMap?.(archetypeId, code),
+    operationalTemplate: draft?.operationalTemplate,
   };
 }
 
@@ -123,7 +132,16 @@ export function downConvertToAdl14(
   const templateId = resolved.templateId ?? binding.templateId;
   const map = (archetypeId: string, code: string): string => {
     if (!ADL2_CODE_RE.test(code)) return code;
-    return resolved.codeMap?.(archetypeId, code) ?? idToAtCode(code);
+    const m = resolved.codeMap?.(archetypeId, code);
+    if (m) return m;
+    return resolved.operationalTemplate
+      ? adl14CodeFor(resolved.operationalTemplate, code, archetypeId || undefined)
+      : idToAtCode(code);
+  };
+  const nodeCode = (archetypeId: string, code: string): string => {
+    const m = map(archetypeId, code);
+    // Node ids are never written back as external codes or dropped.
+    return m && !m.includes("::") ? m : idToAtCode(code);
   };
   const copy = JSON.parse(JSON.stringify(data)) as RmJson;
   const walk = (v: RmJson, archetypeId: string, isRoot: boolean) => {
@@ -136,11 +154,18 @@ export function downConvertToAdl14(
     const nodeId = v.archetype_node_id;
     if (typeof nodeId === "string") {
       if (ARCHETYPE_ID_RE.test(nodeId)) scope = nodeId;
-      else v.archetype_node_id = map(scope, nodeId);
+      else v.archetype_node_id = nodeCode(scope, nodeId);
     }
     if (v._type === "CODE_PHRASE" && isLocal(v.terminology_id)) {
       const code = v.code_string;
-      if (typeof code === "string") v.code_string = map(scope, code);
+      if (typeof code === "string") {
+        const mapped = map(scope, code);
+        const ext = externalCodeOf(mapped);
+        if (ext && isObj(v.terminology_id)) {
+          v.terminology_id.value = ext.terminology;
+          v.code_string = ext.code;
+        } else v.code_string = mapped;
+      }
     }
     const details = v.archetype_details;
     if (isRoot && isObj(details) && isObj(details.template_id)) {

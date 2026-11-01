@@ -129,6 +129,26 @@ export function buildArchetypeTermIndex(
   return index;
 }
 
+/** Raw `term_bindings` (terminology → code → target) per archetype scope key (#252). */
+export function buildArchetypeBindingIndex(
+  inlinedArchetypes: Iterable<openehr_am.ARCHETYPE | undefined>,
+  scopeKeys?: WeakMap<openehr_am.ARCHETYPE, ReadonlySet<string>>,
+): Record<string, Record<string, Record<string, string>>> {
+  const index: Record<string, Record<string, Record<string, string>>> = {};
+  for (const arch of inlinedArchetypes) {
+    if (!arch) continue;
+    const onto = (arch.ontology ?? (arch as { terminology?: unknown }).terminology) as
+      | { term_bindings?: Record<string, Record<string, string>> }
+      | undefined;
+    const bindings = onto?.term_bindings;
+    if (!bindings || typeof bindings !== "object") continue;
+    const keys = new Set<string>([archetypeIdString(arch), readTemplateId(arch as { template_id?: unknown }), ...(scopeKeys?.get(arch) ?? [])]
+      .filter((k): k is string => !!k));
+    for (const key of keys) index[key] ??= bindings;
+  }
+  return index;
+}
+
 function archetypeIdString(arch: openehr_am.ARCHETYPE): string | undefined {
   return arch.archetype_id?.value ?? arch.archetype_id?.toString();
 }

@@ -191,12 +191,26 @@ needed. For compatibility with Archie's format, `upconvertOpt14ToAdl2`
 can also write and read Archie's conversion log (`conversionLog`, off by
 default), which keeps minted codes stable across re-conversions.
 
-Known limit, left for a decision (#252):
+id-coded node and value code collisions (#252; decided 2026-11-01).
+Node ids are what RM data (`archetype_node_id`) and AQL paths carry, so
+they never move. One rule, in `buildAdl14CodeMap`, cached per archetype
+for an id-coded template (`adl14CodeFor`), is used by the OPT 1.4 export,
+Web Template value codes, FLAT and STRUCTURED codes, and RM data
+down-conversion:
 
-- Node ids are mapped one-to-one by `idToAtCode`. A node id of a natively
-  authored id-coded template that the collision-free OPT 1.4 export
-  (`buildAdl14CodeMap`) moves to `at9000+` keeps its plain mapping in Web
-  Template and FLAT paths, so those paths differ from the exported OPT
-  1.4. The export warns about each moved code. Using the collision map
-  in paths changes which at-code an id-coded node has in data, so it is
-  left for a decision.
+- A LOCATABLE node id always maps `idN` → `at(N−1)`; the root never moves.
+- A node id of a non-LOCATABLE type (DV_*, CODE_PHRASE, …) had no node id
+  in ADL 1.4 and is dropped in ADL 1.4 output. So is a synthetic id
+  (`id9000+` with no term); a node id below 9000 with no term is not
+  synthetic.
+- A value code whose shifted code is a node's code shares it if the terms
+  are the same. If it has an external binding, the external code is
+  written back (CKM-mirror faeces `at19` → `[openehr::128]`, as in the
+  ADL 1.4 original); a code the ADL Workbench post-parse processor added
+  is written back even without a collision. Otherwise, which only happens
+  in natively authored content, it moves to the next free `at9000+` and a
+  warning is emitted (export and `bindTemplate`).
+
+Archie never creates such collisions: its id generator shares one counter
+over all code prefixes. They come from ADL Workbench conversions in the
+CKM mirror and from natively authored id-coded artefacts.

@@ -3,6 +3,8 @@
  */
 
 import * as openehr_am from "../../am/openehr_am.ts";
+import { adl14CodeFor } from "../../generation/adl14_code_map_cache.ts";
+import { externalCodeOf } from "../../generation/id_to_at_code.ts";
 import type {
   QuantityItemInterval,
   QuantityItemRuntime,
@@ -10,6 +12,7 @@ import type {
 import * as openehr_base from "../../base/openehr_base.ts";
 import { isDataValueType as metaIsDataValueType } from "../../meta/mod.ts";
 import {
+  adl2CodingSystemOf,
   isSyntheticNodeId,
   markSyntheticNodeId,
 } from "../../parser/legacy/adl2_coding_system.ts";
@@ -591,6 +594,8 @@ export class WebTemplateBuilder {
   private applyL10n: boolean;
   private templateTerms: Record<string, TermBag> = {};
   private archetypeTerms: Record<string, TermDefinitionTable> = {};
+  /** The template being built, when it is id-coded (value codes are mapped). */
+  private opt?: openehr_am.OPERATIONAL_TEMPLATE;
   /** Primary language first, then the additional languages the caller included. */
   private selectedLanguages: string[] = [];
   private idLanguage: WebTemplateIdLanguage = "primary";
@@ -814,8 +819,36 @@ export class WebTemplateBuilder {
         scope,
       );
     }
+    this.mapLocalValueCodes(
+      inputs,
+      (term as TermScopeMeta | undefined)?.[TERM_ARCHETYPE_SCOPE_KEY] ??
+        (cObj as TermScopeMeta | undefined)?.[TERM_ARCHETYPE_SCOPE_KEY],
+    );
 
     return inputs;
+  }
+
+  /**
+   * id-coded templates: local value codes become their ADL 1.4 codes, by the
+   * same per-archetype map as the OPT 1.4 export and RM data (#252). A
+   * value code written back to an external code changes the terminology.
+   */
+  private mapLocalValueCodes(inputs: WebTemplateInput[], scope: string | undefined): void {
+    if (!this.opt) return;
+    for (const input of inputs) {
+      if (input.terminology && input.terminology !== "local") continue;
+      if (!input.list?.length && typeof input.defaultValue !== "string") continue;
+      let external: string | undefined;
+      const map = (code: string) => {
+        const m = adl14CodeFor(this.opt, code, scope);
+        const ext = externalCodeOf(m);
+        if (ext) external = ext.terminology;
+        return ext?.code ?? m;
+      };
+      if (input.list) input.list = input.list.map((item) => ({ ...item, value: map(item.value) }));
+      if (typeof input.defaultValue === "string") input.defaultValue = map(input.defaultValue);
+      if (external && input.terminology) input.terminology = external;
+    }
   }
 
   /** Attach OPT path annotations and promote L10n.* into localizedNames. */
@@ -861,6 +894,7 @@ export class WebTemplateBuilder {
       TermBag
     >;
     this.archetypeTerms = scoped.archetype_term_definitions ?? {};
+    this.opt = adl2CodingSystemOf(opt) === "id-coded" ? opt : undefined;
     this.bagCache.clear();
     this.pathAnnotations = this.applyL10n ? flattenOptPathAnnotations(opt) : {};
 

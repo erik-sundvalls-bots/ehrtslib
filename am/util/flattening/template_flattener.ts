@@ -9,6 +9,7 @@ import * as openehr_base from "../../../base/openehr_base.ts";
 import { cloneAttribute, cloneComplexObject } from "../aom_clone.ts";
 import {
   applyMergedTerminology,
+  buildArchetypeBindingIndex,
   buildArchetypeTermIndex,
   buildMergedTerminology,
   readTemplateId,
@@ -306,6 +307,8 @@ export function flattenToOperationalTemplate(
       [source, ...inlinedArchetypes],
       scopeKeys,
     );
+  (opt as { archetype_term_bindings?: ReturnType<typeof buildArchetypeBindingIndex> })
+    .archetype_term_bindings = buildArchetypeBindingIndex([source, ...inlinedArchetypes], scopeKeys);
 
   return opt;
 }

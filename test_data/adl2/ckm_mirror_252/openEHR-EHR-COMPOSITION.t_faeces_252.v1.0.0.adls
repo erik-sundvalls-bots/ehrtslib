@@ -1,0 +1,35 @@
+template (adl_version=2.0.6; rm_release=1.1.0)
+	openEHR-EHR-COMPOSITION.t_faeces_252.v1.0.0
+
+specialize
+	openEHR-EHR-COMPOSITION.report_demo.v1
+
+language
+	original_language = <[ISO_639-1::en]>
+
+description
+	lifecycle_state = <"unmanaged">
+	original_author = <
+		["name"] = <"Ehrtslib test">
+	>
+	details = <
+		["en"] = <
+			language = <[ISO_639-1::en]>
+			purpose = <"Faeces archetype for the id/at collision rule (#252).">
+		>
+	>
+
+definition
+	COMPOSITION[id1.1] matches {	-- Faeces report
+		/content[id2] matches {
+			use_archetype OBSERVATION[id2.1, openEHR-EHR-OBSERVATION.faeces.v1] occurrences matches {1}
+		}
+	}
+
+terminology
+	term_definitions = <
+		["en"] = <
+			["id1.1"] = <text = <"Faeces report"> description = <"Faeces report template.">>
+			["id2.1"] = <text = <"Faeces"> description = <"Faeces observation.">>
+		>
+	>

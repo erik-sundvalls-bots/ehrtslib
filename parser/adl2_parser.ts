@@ -414,6 +414,11 @@ export class ADL2Parser {
       };
       for (const [archId, bag] of Object.entries(data)) {
         if (!bag || typeof bag !== "object" || Array.isArray(bag)) continue;
+        const rawBindings = (bag as OdinObject).term_bindings;
+        if (rawBindings && typeof rawBindings === "object" && !Array.isArray(rawBindings)) {
+          const meta = opt as { archetype_term_bindings?: Record<string, unknown> };
+          (meta.archetype_term_bindings ??= {})[archId] = rawBindings;
+        }
         const termDefs = (bag as OdinObject).term_definitions;
         if (termDefs === undefined) continue;
         const table = mapTermDefinitions(termDefs);
