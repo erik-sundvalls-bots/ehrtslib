@@ -1,0 +1,793 @@
+operational_template (adl_version=2.4.0; rm_release=1.0.4)
+    test_all_types.en.v1
+
+description
+    original_author = <
+            ["Original Author"] = <"Not Specified">
+        >
+    details = <
+            ["en"] = <
+                language = <[ISO_639-1::en]>
+                purpose = <"Not Specified">
+            >
+        >
+    lifecycle_state = <"Initial">
+
+definition
+    use_archetype COMPOSITION[at0000, openEHR-EHR-COMPOSITION.test_all_types.v1] occurrences matches {1..1} matches {
+        category existence matches {1..1} matches {
+            DV_CODED_TEXT[at0023] occurrences matches {1..1} matches {
+                defining_code existence matches {1..1} matches {
+                    [openehr::433]
+                }
+            }
+        }
+        context existence matches {0..1} matches {
+            EVENT_CONTEXT[at0024] occurrences matches {1..1} matches {
+                other_context existence matches {0..1} matches {
+                    ITEM_SINGLE[at0004] occurrences matches {1..1} matches {
+                        item existence matches {1..1} matches {
+                            ELEMENT[at0005] occurrences matches {1..1} matches {
+                                value existence matches {0..1} matches {
+                                    DV_CODED_TEXT[at0025] occurrences matches {1..1} matches {
+                                        defining_code existence matches {1..1} matches {
+                                            [at0006], [at0007], [at0008]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        content existence matches {0..1} cardinality matches {0..*; unordered} matches {
+            use_archetype OBSERVATION[at0000, openEHR-EHR-OBSERVATION.test_all_types.v1] occurrences matches {0..*} matches {
+                data existence matches {1..1} matches {
+                    HISTORY[at0001] occurrences matches {1..1} matches {
+                        events existence matches {0..1} cardinality matches {1..*; unordered} matches {
+                            EVENT[at0002] occurrences matches {0..1} matches {
+                                data existence matches {1..1} matches {
+                                    ITEM_TREE[at0003] occurrences matches {1..1} matches {
+                                        items existence matches {0..1} cardinality matches {0..*; unordered} matches {
+                                            ELEMENT[at0004] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_TEXT[at0023] occurrences matches {1..1}
+                                                }
+                                            }
+                                            ELEMENT[at0005] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_CODED_TEXT[at0024] occurrences matches {1..1} matches {
+                                                        defining_code existence matches {1..1} matches {
+                                                            CODE_PHRASE
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            ELEMENT[at0006] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_CODED_TEXT[at0025] occurrences matches {1..1} matches {
+                                                        defining_code existence matches {1..1} matches {
+                                                            CODE_PHRASE
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            ELEMENT[at0007] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_QUANTITY[at0026] occurrences matches {1..1} matches {
+                                                        property matches {[openehr::124]}
+                                                        units matches {"mg", "kg"}
+                                                    }
+                                                }
+                                            }
+                                            ELEMENT[at0008] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_COUNT[at0027] occurrences matches {1..1}
+                                                }
+                                            }
+                                            ELEMENT[at0009] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_DATE[at0028] occurrences matches {1..1}
+                                                }
+                                            }
+                                            ELEMENT[at0010] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_DATE_TIME[at0029] occurrences matches {1..1} matches {
+                                                        value existence matches {1..1} matches {/yyyy-mm-ddTHH:MM:SS/}
+                                                    }
+                                                }
+                                            }
+                                            ELEMENT[at0011] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_DATE_TIME[at0030] occurrences matches {1..1}
+                                                }
+                                            }
+                                            ELEMENT[at0012] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_TIME[at0031] occurrences matches {1..1}
+                                                }
+                                            }
+                                            ELEMENT[at0013] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_ORDINAL[at0032] occurrences matches {1..1} matches {
+                                                        [value, symbol] matches {
+                                                            [{0}, {[at0014]}],
+                                                            [{1}, {[at0015]}],
+                                                            [{2}, {[at0016]}]
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            ELEMENT[at0017] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_BOOLEAN[at0033] occurrences matches {1..1} matches {
+                                                        value existence matches {1..1} matches {
+                                                            True, False
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            ELEMENT[at0018] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_DURATION[at0034] occurrences matches {1..1}
+                                                }
+                                            }
+                                            ELEMENT[at0019] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_MULTIMEDIA[at0035] occurrences matches {1..1} matches {
+                                                        media_type existence matches {1..1} matches {
+                                                            CODE_PHRASE
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            ELEMENT[at0020] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_PARSABLE[at0036] occurrences matches {1..1}
+                                                }
+                                            }
+                                            ELEMENT[at0021] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_IDENTIFIER[at0037] occurrences matches {1..1}
+                                                }
+                                            }
+                                            ELEMENT[at0022] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_PROPORTION[at0038] occurrences matches {1..1}
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            use_archetype EVALUATION[at0000, openEHR-EHR-EVALUATION.test_all_types.v1] occurrences matches {0..*} matches {
+                data existence matches {1..1} matches {
+                    ITEM_TREE[at0001] occurrences matches {1..1} matches {
+                        items existence matches {0..1} cardinality matches {0..*; unordered} matches {
+                            ELEMENT[at0002] occurrences matches {0..1} matches {
+                                value existence matches {0..1} matches {
+                                    DV_URI[at0011] occurrences matches {1..1}
+                                }
+                            }
+                            ELEMENT[at0003] occurrences matches {0..1} matches {
+                                value existence matches {0..1} matches {
+                                    DV_INTERVAL<DV_COUNT>[at0012] occurrences matches {1..1} matches {
+                                        upper existence matches {0..1} matches {
+                                            DV_COUNT[at0013] occurrences matches {1..1}
+                                        }
+                                        lower existence matches {0..1} matches {
+                                            DV_COUNT[at0014] occurrences matches {1..1}
+                                        }
+                                    }
+                                }
+                            }
+                            ELEMENT[at0004] occurrences matches {0..1} matches {
+                                value existence matches {0..1} matches {
+                                    DV_INTERVAL<DV_QUANTITY>[at0015] occurrences matches {1..1} matches {
+                                        upper existence matches {0..1} matches {
+                                            DV_QUANTITY[at0016] occurrences matches {1..1}
+                                        }
+                                        lower existence matches {0..1} matches {
+                                            DV_QUANTITY[at0017] occurrences matches {1..1}
+                                        }
+                                    }
+                                }
+                            }
+                            ELEMENT[at0005] occurrences matches {0..1} matches {
+                                value existence matches {0..1} matches {
+                                    DV_INTERVAL<DV_DATE_TIME>[at0018] occurrences matches {1..1} matches {
+                                        upper existence matches {0..1} matches {
+                                            DV_DATE_TIME[at0019] occurrences matches {1..1}
+                                        }
+                                        lower existence matches {0..1} matches {
+                                            DV_DATE_TIME[at0020] occurrences matches {1..1}
+                                        }
+                                    }
+                                }
+                            }
+                            ELEMENT[at0009] occurrences matches {0..1} matches {
+                                value existence matches {0..1} matches {
+                                    DV_QUANTITY[at0021] occurrences matches {1..1} matches {
+                                        property matches {[openehr::125]}
+                                        units matches {"mm[H20]", "mm[Hg]"}
+                                    }
+                                    DV_COUNT[at0022] occurrences matches {1..1}
+                                }
+                            }
+                            CLUSTER[at0006] occurrences matches {0..1} matches {
+                                items existence matches {1..1} cardinality matches {1..*; unordered} matches {
+                                    CLUSTER[at0007] occurrences matches {0..1} matches {
+                                        items existence matches {1..1} cardinality matches {1..*; unordered} matches {
+                                            CLUSTER[at0008] occurrences matches {0..1} matches {
+                                                items existence matches {1..1} cardinality matches {1..*; unordered} matches {
+                                                    ELEMENT[at0010] occurrences matches {0..1} matches {
+                                                        value existence matches {0..1} matches {
+                                                            DV_TEXT[at0023] occurrences matches {1..1}
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            use_archetype SECTION[at0000, openEHR-EHR-SECTION.test_all_types.v1] occurrences matches {0..*} matches {
+                items existence matches {0..1} cardinality matches {1..*; unordered} matches {
+                    SECTION[at0001] occurrences matches {0..1} matches {
+                        items existence matches {0..1} cardinality matches {1..*; unordered} matches {
+                            SECTION[at0002] occurrences matches {0..1} matches {
+                                items existence matches {0..1} cardinality matches {1..*; unordered} matches {
+                                    use_archetype INSTRUCTION[at0000, openEHR-EHR-INSTRUCTION.test_all_types.v1] occurrences matches {0..*} matches {
+                                        activities existence matches {0..1} cardinality matches {0..*; unordered} matches {
+                                            ACTIVITY[at0001] occurrences matches {0..1} matches {
+                                                action_archetype_id existence matches {1..1} matches {/openEHR-EHR-ACTION\.test_all_types\.v1/}
+                                                description existence matches {1..1} matches {
+                                                    ITEM_LIST[at0002] occurrences matches {1..1} matches {
+                                                        items existence matches {0..1} cardinality matches {0..*; unordered} matches {
+                                                            ELEMENT[at0003] occurrences matches {0..1} matches {
+                                                                value existence matches {0..1} matches {
+                                                                    DV_DATE[at0005] occurrences matches {1..1} matches {
+                                                                        value existence matches {1..1} matches {/yyyy-??-XX/}
+                                                                    }
+                                                                }
+                                                            }
+                                                            ELEMENT[at0004] occurrences matches {0..1} matches {
+                                                                value existence matches {0..1} matches {
+                                                                    DV_DATE_TIME[at0006] occurrences matches {1..1} matches {
+                                                                        value existence matches {1..1} matches {/yyyy-mm-ddTHH:??:??/}
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    use_archetype ACTION[at0000, openEHR-EHR-ACTION.test_all_types.v1] occurrences matches {0..*} matches {
+                                        ism_transition existence matches {1..1} matches {
+                                            ISM_TRANSITION[at0003] occurrences matches {1..1} matches {
+                                                current_state existence matches {1..1} matches {
+                                                    DV_CODED_TEXT[at0006] occurrences matches {1..1} matches {
+                                                        defining_code existence matches {1..1} matches {
+                                                            [openehr::526]
+                                                        }
+                                                    }
+                                                }
+                                                careflow_step existence matches {0..1} matches {
+                                                    DV_CODED_TEXT[at0007] occurrences matches {1..1} matches {
+                                                        defining_code existence matches {1..1} matches {
+                                                            [at0003]
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            ISM_TRANSITION[at0004] occurrences matches {1..1} matches {
+                                                current_state existence matches {1..1} matches {
+                                                    DV_CODED_TEXT[at0008] occurrences matches {1..1} matches {
+                                                        defining_code existence matches {1..1} matches {
+                                                            [openehr::245]
+                                                        }
+                                                    }
+                                                }
+                                                careflow_step existence matches {0..1} matches {
+                                                    DV_CODED_TEXT[at0009] occurrences matches {1..1} matches {
+                                                        defining_code existence matches {1..1} matches {
+                                                            [at0004]
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            ISM_TRANSITION[at0005] occurrences matches {1..1} matches {
+                                                current_state existence matches {1..1} matches {
+                                                    DV_CODED_TEXT[at0010] occurrences matches {1..1} matches {
+                                                        defining_code existence matches {1..1} matches {
+                                                            [openehr::532]
+                                                        }
+                                                    }
+                                                }
+                                                careflow_step existence matches {0..1} matches {
+                                                    DV_CODED_TEXT[at0011] occurrences matches {1..1} matches {
+                                                        defining_code existence matches {1..1} matches {
+                                                            [at0005]
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        description existence matches {1..1} matches {
+                                            ITEM_TREE[at0001] occurrences matches {1..1} matches {
+                                                items existence matches {0..1} cardinality matches {0..*; unordered} matches {
+                                                    use_archetype CLUSTER[at0000, openEHR-EHR-CLUSTER.test_all_types.v1] occurrences matches {0..*} matches {
+                                                        items existence matches {1..1} cardinality matches {1..*; unordered} matches {
+                                                            CLUSTER[at0001] occurrences matches {0..1} matches {
+                                                                items existence matches {1..1} cardinality matches {1..*; unordered} matches {
+                                                                    CLUSTER[at0002] occurrences matches {0..1} matches {
+                                                                        items existence matches {1..1} cardinality matches {1..*; unordered} matches {
+                                                                            ELEMENT[at0003] occurrences matches {0..1} matches {
+                                                                                value existence matches {0..1} matches {
+                                                                                    DV_BOOLEAN[at0004] occurrences matches {1..1} matches {
+                                                                                        value existence matches {1..1} matches {
+                                                                                            True, False
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            use_archetype ADMIN_ENTRY[at0000, openEHR-EHR-ADMIN_ENTRY.test_all_types.v1] occurrences matches {0..*} matches {
+                                data existence matches {1..1} matches {
+                                    ITEM_SINGLE[at0001] occurrences matches {1..1} matches {
+                                        item existence matches {1..1} matches {
+                                            ELEMENT[at0002] occurrences matches {1..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_COUNT[at0003] occurrences matches {1..1}
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+terminology
+    term_definitions = <
+            ["en"] = <
+                ["at0000"] = <
+                    text = <"Test all types">
+                    description = <"unknown">
+                >
+                ["at0001"] = <
+                    text = <"Unico(a)">
+                    description = <"@ internal @">
+                >
+                ["at0002"] = <
+                    text = <"count 3">
+                    description = <"*">
+                >
+                ["at0003"] = <
+                    text = <"boolean 2">
+                    description = <"*">
+                >
+                ["at0004"] = <
+                    text = <"Active">
+                    description = <"*">
+                >
+                ["at0005"] = <
+                    text = <"Completed">
+                    description = <"*">
+                >
+                ["at0006"] = <
+                    text = <"cluster 1">
+                    description = <"*">
+                >
+                ["at0007"] = <
+                    text = <"cluster 2">
+                    description = <"*">
+                >
+                ["at0008"] = <
+                    text = <"cluster 3">
+                    description = <"*">
+                >
+                ["at0009"] = <
+                    text = <"choice">
+                    description = <"*">
+                >
+                ["at0010"] = <
+                    text = <"text 2">
+                    description = <"*">
+                >
+                ["at0011"] = <
+                    text = <"datetime any">
+                    description = <"*">
+                >
+                ["at0012"] = <
+                    text = <"time">
+                    description = <"*">
+                >
+                ["at0013"] = <
+                    text = <"ordinal">
+                    description = <"*">
+                >
+                ["at0014"] = <
+                    text = <"ord1">
+                    description = <"*">
+                >
+                ["at0015"] = <
+                    text = <"ord1">
+                    description = <"*">
+                >
+                ["at0016"] = <
+                    text = <"ord3">
+                    description = <"*">
+                >
+                ["at0017"] = <
+                    text = <"boolean">
+                    description = <"*">
+                >
+                ["at0018"] = <
+                    text = <"duration any">
+                    description = <"*">
+                >
+                ["at0019"] = <
+                    text = <"multimedia any">
+                    description = <"*">
+                >
+                ["at0020"] = <
+                    text = <"parsable any">
+                    description = <"*">
+                >
+                ["at0021"] = <
+                    text = <"identifier">
+                    description = <"*">
+                >
+                ["at0022"] = <
+                    text = <"proportion any">
+                    description = <"*">
+                >
+            >
+        >
+component_terminologies
+<
+            ["openEHR-EHR-ACTION.test_all_types.v1"] = <
+                term_definitions = <
+                    ["en"] = <
+                        ["at0000"] = <
+                            text = <"Test all types">
+                            description = <"unknown">
+                        >
+                        ["at0001"] = <
+                            text = <"Arbol">
+                            description = <"@ internal @">
+                        >
+                        ["at0002"] = <
+                            text = <"slot to cluster 4">
+                            description = <"*">
+                        >
+                        ["at0003"] = <
+                            text = <"Planned">
+                            description = <"*">
+                        >
+                        ["at0004"] = <
+                            text = <"Active">
+                            description = <"*">
+                        >
+                        ["at0005"] = <
+                            text = <"Completed">
+                            description = <"*">
+                        >
+                    >
+                >
+            >
+            ["openEHR-EHR-ADMIN_ENTRY.test_all_types.v1"] = <
+                term_definitions = <
+                    ["en"] = <
+                        ["at0000"] = <
+                            text = <"Test all types">
+                            description = <"unknown">
+                        >
+                        ["at0001"] = <
+                            text = <"Unico(a)">
+                            description = <"@ internal @">
+                        >
+                        ["at0002"] = <
+                            text = <"count 3">
+                            description = <"*">
+                        >
+                    >
+                >
+            >
+            ["openEHR-EHR-CLUSTER.test_all_types.v1"] = <
+                term_definitions = <
+                    ["en"] = <
+                        ["at0000"] = <
+                            text = <"Test all types">
+                            description = <"unknown">
+                        >
+                        ["at0001"] = <
+                            text = <"cluster 5">
+                            description = <"*">
+                        >
+                        ["at0002"] = <
+                            text = <"cluster 6">
+                            description = <"*">
+                        >
+                        ["at0003"] = <
+                            text = <"boolean 2">
+                            description = <"*">
+                        >
+                    >
+                >
+            >
+            ["openEHR-EHR-COMPOSITION.test_all_types.v1"] = <
+                term_definitions = <
+                    ["en"] = <
+                        ["at0000"] = <
+                            text = <"Test all types">
+                            description = <"unknown">
+                        >
+                        ["at0001"] = <
+                            text = <"observation 1">
+                            description = <"*">
+                        >
+                        ["at0002"] = <
+                            text = <"evaluation 1">
+                            description = <"*">
+                        >
+                        ["at0003"] = <
+                            text = <"section 1">
+                            description = <"*">
+                        >
+                        ["at0004"] = <
+                            text = <"Unico(a)">
+                            description = <"@ internal @">
+                        >
+                        ["at0005"] = <
+                            text = <"context coded text">
+                            description = <"*">
+                        >
+                        ["at0006"] = <
+                            text = <"value1">
+                            description = <"*">
+                        >
+                        ["at0007"] = <
+                            text = <"value2">
+                            description = <"*">
+                        >
+                        ["at0008"] = <
+                            text = <"value3">
+                            description = <"*">
+                        >
+                    >
+                >
+            >
+            ["openEHR-EHR-EVALUATION.test_all_types.v1"] = <
+                term_definitions = <
+                    ["en"] = <
+                        ["at0000"] = <
+                            text = <"Test all types">
+                            description = <"unknown">
+                        >
+                        ["at0001"] = <
+                            text = <"Arbol">
+                            description = <"@ internal @">
+                        >
+                        ["at0002"] = <
+                            text = <"uri">
+                            description = <"*">
+                        >
+                        ["at0003"] = <
+                            text = <"interval count">
+                            description = <"*">
+                        >
+                        ["at0004"] = <
+                            text = <"interval quantity">
+                            description = <"*">
+                        >
+                        ["at0005"] = <
+                            text = <"interval datetime">
+                            description = <"*">
+                        >
+                        ["at0006"] = <
+                            text = <"cluster 1">
+                            description = <"*">
+                        >
+                        ["at0007"] = <
+                            text = <"cluster 2">
+                            description = <"*">
+                        >
+                        ["at0008"] = <
+                            text = <"cluster 3">
+                            description = <"*">
+                        >
+                        ["at0009"] = <
+                            text = <"choice">
+                            description = <"*">
+                        >
+                        ["at0010"] = <
+                            text = <"text 2">
+                            description = <"*">
+                        >
+                    >
+                >
+            >
+            ["openEHR-EHR-INSTRUCTION.test_all_types.v1"] = <
+                term_definitions = <
+                    ["en"] = <
+                        ["at0000"] = <
+                            text = <"Test all types">
+                            description = <"unknown">
+                        >
+                        ["at0001"] = <
+                            text = <"Current Activity">
+                            description = <"Current Activity">
+                        >
+                        ["at0002"] = <
+                            text = <"Lista">
+                            description = <"@ internal @">
+                        >
+                        ["at0003"] = <
+                            text = <"partial date">
+                            description = <"*">
+                        >
+                        ["at0004"] = <
+                            text = <"partial datetime">
+                            description = <"*">
+                        >
+                    >
+                >
+            >
+            ["openEHR-EHR-OBSERVATION.test_all_types.v1"] = <
+                term_definitions = <
+                    ["en"] = <
+                        ["at0000"] = <
+                            text = <"Test all types">
+                            description = <"unknown">
+                        >
+                        ["at0001"] = <
+                            text = <"Event Series">
+                            description = <"@ internal @">
+                        >
+                        ["at0002"] = <
+                            text = <"Cualquier evento">
+                            description = <"*">
+                        >
+                        ["at0003"] = <
+                            text = <"Arbol">
+                            description = <"@ internal @">
+                        >
+                        ["at0004"] = <
+                            text = <"text">
+                            description = <"*">
+                        >
+                        ["at0005"] = <
+                            text = <"coded text">
+                            description = <"*">
+                        >
+                        ["at0006"] = <
+                            text = <"coded text terminology">
+                            description = <"*">
+                        >
+                        ["at0007"] = <
+                            text = <"quantity">
+                            description = <"*">
+                        >
+                        ["at0008"] = <
+                            text = <"count">
+                            description = <"*">
+                        >
+                        ["at0009"] = <
+                            text = <"date">
+                            description = <"*">
+                        >
+                        ["at0010"] = <
+                            text = <"datetime">
+                            description = <"*">
+                        >
+                        ["at0011"] = <
+                            text = <"datetime any">
+                            description = <"*">
+                        >
+                        ["at0012"] = <
+                            text = <"time">
+                            description = <"*">
+                        >
+                        ["at0013"] = <
+                            text = <"ordinal">
+                            description = <"*">
+                        >
+                        ["at0014"] = <
+                            text = <"ord1">
+                            description = <"*">
+                        >
+                        ["at0015"] = <
+                            text = <"ord1">
+                            description = <"*">
+                        >
+                        ["at0016"] = <
+                            text = <"ord3">
+                            description = <"*">
+                        >
+                        ["at0017"] = <
+                            text = <"boolean">
+                            description = <"*">
+                        >
+                        ["at0018"] = <
+                            text = <"duration any">
+                            description = <"*">
+                        >
+                        ["at0019"] = <
+                            text = <"multimedia any">
+                            description = <"*">
+                        >
+                        ["at0020"] = <
+                            text = <"parsable any">
+                            description = <"*">
+                        >
+                        ["at0021"] = <
+                            text = <"identifier">
+                            description = <"*">
+                        >
+                        ["at0022"] = <
+                            text = <"proportion any">
+                            description = <"*">
+                        >
+                    >
+                >
+            >
+            ["openEHR-EHR-SECTION.test_all_types.v1"] = <
+                term_definitions = <
+                    ["en"] = <
+                        ["at0000"] = <
+                            text = <"Test all types">
+                            description = <"unknown">
+                        >
+                        ["at0001"] = <
+                            text = <"section 2">
+                            description = <"*">
+                        >
+                        ["at0002"] = <
+                            text = <"section 3">
+                            description = <"*">
+                        >
+                        ["at0003"] = <
+                            text = <"instruction 1">
+                            description = <"*">
+                        >
+                        ["at0004"] = <
+                            text = <"action 1">
+                            description = <"*">
+                        >
+                        ["at0005"] = <
+                            text = <"admin entry 1">
+                            description = <"*">
+                        >
+                    >
+                >
+            >
+        >
+
