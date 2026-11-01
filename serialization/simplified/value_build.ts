@@ -4,7 +4,7 @@
  * Value construction is driven by the declarative per-type maps in
  * `dv_field_maps.ts`. Fields are keyed by pipe suffix; the empty-string key
  * "" denotes the bare path key (no `|suffix`), with `value` accepted as an
- * alias for compatibility with older payloads.
+ * alias (the spec examples write `meaning|value`, `_wf_definition|value`).
  */
 
 import { buildDvValue, type DvValueBuildContext } from "./dv_field_maps.ts";
