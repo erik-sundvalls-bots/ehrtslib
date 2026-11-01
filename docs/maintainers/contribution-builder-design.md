@@ -372,28 +372,27 @@ for review:
   need not be unique: a path that matches several nodes is narrowed by
   adding prefix steps.
 
-  Examples use the test template `test_data/opt14/multilingual_en_sv_de.opt`
-  (blood pressure, en/sv/de). It has no annotations, so the `@` and `$` rows
-  assume that annotations are added to it. The strings below use the
+  Examples use `test_data/opt14/simple-diagnose-and-vitals.opt` (Simple
+  vitals, en/sv/de), whose annotations are `ui.section = vitals` on the five
+  vital signs observations, `am.symbol_binding` `pulse` and `bp`, and `a.id`
+  `systolic` and `rate` (on both Respiration and Pulse). The strings use the
   shorthand form; typed steps are canonical, and escaping of `/` and `=` is
   still open ([ADR 0011](../adr/0011-cb-optional-graphql-api.md) question 3).
 
   | Style | Example | Resolves to |
   | --- | --- | --- |
   | uid | `<uuid>::a3.17` | that one node instance |
-  | ADL2 codes | `openEHR-EHR-OBSERVATION.blood_pressure.v2/data[id2]/events[id7]/data[id4]/items[id5]` | every Systolic `ELEMENT` |
+  | ADL2 codes | `openEHR-EHR-OBSERVATION.blood_pressure.v2/data[id2]/events[id7]/data[id4]/items[id5]` | Systolic in every event |
   | ADL 1.4 codes | `openEHR-EHR-OBSERVATION.blood_pressure.v2/data[at0001]/events[at0006]/data[at0003]/items[at0004]` | the same, at-codes mapped to id-codes |
-  | Names, default `lang.1` (en) | `Blood pressure/Systolic` | every Systolic `ELEMENT` |
-  | Names, `lang=sv` | `Blodtryck/Systoliskt` | the same |
-  | Annotation | `@ui.section=vitals` | every node annotated `ui.section = vitals`, anywhere in the template |
-  | Symbol (`a.id`) | `$systolic` | nodes with `a.id = systolic` |
-  | Symbol (`am.symbol_binding`) | `$bp` | nodes with `am.symbol_binding = bp` (the OBSERVATION) |
-  | 0-based index | `Blood pressure/Any event:1/Systolic` | Systolic in the second event |
-  | Mixed | `$bp/Any event:0/data[id4]/items[id5]` | Systolic in the first event of `$bp` |
-  | Narrowed | `$bp/$systolic` | if a second OBSERVATION also has a `$systolic` node, `$systolic` matches both; the `$bp` prefix leaves one |
-
-  With `lang=sv`, `Any event` has no Swedish term, so it falls back to the
-  original language: `Blodtryck/Any event:1/Systoliskt`.
+  | Names, default `lang.1` (en) | `Vital signs/Blood pressure/Any event/Systolic` | the same |
+  | Names, `lang=sv` | `Vitalparametrar/Blodtryck/Ospecificerad händelse/Systoliskt` | the same |
+  | Annotation | `@ui.section=vitals` | the five observations |
+  | Symbol (`a.id`) | `$systolic` | Systolic in every event |
+  | Symbol (`am.symbol_binding`) | `$bp` | the Blood pressure observation |
+  | 0-based index | `Vital signs/Blood pressure/Any event:1/Systolic` | Systolic in the second event |
+  | Mixed | `$bp/Any event:0/data[id4]/items[id5]` | Systolic in the first event |
+  | Ambiguous | `$rate` | Rate in Respiration and in Pulse; a mutation fails and lists both |
+  | Narrowed | `$pulse/$rate` or `Respiration/$rate` | only the Pulse rate, or only the Respiration rate |
 - Every address resolves to uids, and every mutation becomes ordinary
   operations in the log, with the author taken from the request context.
   An ambiguous or empty address in a mutation is an error that lists the
