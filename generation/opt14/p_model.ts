@@ -85,13 +85,13 @@ function primitiveFromAom(
     };
   }
   if (item instanceof openehr_am.C_STRING) {
+    const list = (item as { list?: string[] }).list;
+    if (list?.length) return { type: "string", list };
     const pattern = str((item as { pattern?: unknown }).pattern) ?? "";
     if (rm === "Integer" || rm === "Real") {
       return { type: "interval", expr: pattern };
     }
-    if (rm === "STRING") return { type: "string", pattern };
-    // Quoted string constraint(s); the cADL parser joins values with `|`.
-    return { type: "string", list: pattern.split("|") };
+    return { type: "string", pattern };
   }
   return undefined;
 }
@@ -136,12 +136,33 @@ export function pFromAom(obj: openehr_am.C_OBJECT): PObject {
     };
   }
   const attributeTuples = attributeTuplesFromAom(obj);
+  // C_QUANTITY keeps `property matches {[at19]}` as a field, not an attribute.
+  const property = quantityProperty(obj);
+  if (property && !attrs.some((a) => a.name === "property")) {
+    attrs.unshift({
+      name: "property",
+      multiple: false,
+      children: [{ rmType: "CODE_PHRASE", kind: "term", termConstraint: property }],
+    });
+  }
   return {
     ...base,
     kind: "complex",
     attrs: attrs.length ? attrs : undefined,
     attributeTuples,
   };
+}
+
+function quantityProperty(obj: openehr_am.C_OBJECT): string | undefined {
+  if (!(obj instanceof openehr_am.C_QUANTITY)) return undefined;
+  const p = (obj as { property?: unknown }).property;
+  if (typeof p === "string") return p.trim() || undefined;
+  const cp = p as { terminology_id?: { value?: string }; code_string?: string } | undefined;
+  if (cp?.code_string) {
+    const t = cp.terminology_id?.value;
+    return t && t !== "local" ? `[${t}::${cp.code_string}]` : cp.code_string;
+  }
+  return undefined;
 }
 
 function pAttrFromAom(attr: openehr_am.C_ATTRIBUTE): PAttribute {

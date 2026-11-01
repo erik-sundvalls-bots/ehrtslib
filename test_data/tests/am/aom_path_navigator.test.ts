@@ -14,7 +14,8 @@ Deno.test("resolveAomPath - simple_observation element", async () => {
   const def = archetype!.definition!;
   const match = resolveAomPath(
     def,
-    "/data[at0002]/events[at0003]/data[at0004]/items[at0005]",
+    // at-code path for the id-coded nodes (id2 → at0001, …, id5 → at0004).
+    "/data[at0001]/events[at0002]/data[at0003]/items[at0004]",
   );
   assertEquals(match?.object.rm_type_name, "ELEMENT");
   assertEquals(match?.object.node_id, "id5");

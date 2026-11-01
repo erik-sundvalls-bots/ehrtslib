@@ -1,0 +1,122 @@
+operational_template (adl_version=2.4.0; rm_release=1.0.4)
+    minimal_evaluation.en.v1
+
+language
+    original_language = <[ISO_639-1::en]>
+
+description
+    original_author = <
+            ["Original Author"] = <"Not Specified">
+        >
+    details = <
+            ["en"] = <
+                language = <[ISO_639-1::en]>
+                purpose = <"Not Specified">
+            >
+        >
+    other_details = <
+            ["MetaDataSet:Sample Set"] = <"Template metadata sample set">
+            ["Acknowledgements"] = <"">
+            ["Business Process Level"] = <"">
+            ["Care setting"] = <"">
+            ["Client group"] = <"">
+            ["Clinical Record Element"] = <"">
+            ["Copyright"] = <"">
+            ["Issues"] = <"">
+            ["Owner"] = <"">
+            ["Sign off"] = <"">
+            ["Speciality"] = <"">
+            ["User roles"] = <"">
+        >
+    lifecycle_state = <"Initial">
+
+definition
+    use_archetype COMPOSITION[at0000, openEHR-EHR-COMPOSITION.minimal.v1] occurrences matches {1..1} matches {
+        category existence matches {1..1} matches {
+            DV_CODED_TEXT[at9000] occurrences matches {1..1} matches {
+                defining_code existence matches {1..1} matches {
+                    [openehr::433]
+                }
+            }
+        }
+        content existence matches {0..1} cardinality matches {0..*; unordered} matches {
+            use_archetype EVALUATION[at0000, openEHR-EHR-EVALUATION.minimal.v1] occurrences matches {0..*} matches {
+                data existence matches {1..1} matches {
+                    ITEM_TREE[at0001] occurrences matches {1..1} matches {
+                        items existence matches {0..1} cardinality matches {0..*; unordered} matches {
+                            ELEMENT[at0002] occurrences matches {0..1} matches {
+                                value existence matches {0..1} matches {
+                                    DV_QUANTITY[at9000] occurrences matches {1..1} matches {
+                                        property matches {[openehr::124]}
+                                        units matches {"kg", "mg", "gm"}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+terminology
+    term_definitions = <
+            ["en"] = <
+                ["at0000"] = <
+                    text = <"Minimal">
+                    description = <"unknown">
+                >
+                ["at0001"] = <
+                    text = <"Arbol">
+                    description = <"@ internal @">
+                >
+                ["at0002"] = <
+                    text = <"quantity">
+                    description = <"*">
+                >
+            >
+        >
+component_terminologies
+<
+            ["openEHR-EHR-COMPOSITION.minimal.v1"] = <
+                term_definitions = <
+                    ["en"] = <
+                        ["at0000"] = <
+                            text = <"Minimal">
+                            description = <"unknown">
+                        >
+                    >
+                >
+            >
+            ["openEHR-EHR-EVALUATION.minimal.v1"] = <
+                term_definitions = <
+                    ["en"] = <
+                        ["at0000"] = <
+                            text = <"Minimal">
+                            description = <"unknown">
+                        >
+                        ["at0001"] = <
+                            text = <"Arbol">
+                            description = <"@ internal @">
+                        >
+                        ["at0002"] = <
+                            text = <"quantity">
+                            description = <"*">
+                        >
+                    >
+                >
+            >
+        >
+
+annotations
+    documentation = <
+            ["en"] = <
+                ["/category[at9000]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/content[at0000]/data[at0001]/items[at0002]/value[at9000]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+            >
+        >
+

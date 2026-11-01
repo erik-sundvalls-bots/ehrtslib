@@ -289,7 +289,7 @@ Deno.test("prepareContribution warns when ADL2-native binding lacks OPT 1.4 expo
     committer: COMMITTER,
     creatingSystemId: "cdr.example",
   });
-  const mappingWarnings = p.warnings.filter((w) => w.includes("default code shift"));
+  const mappingWarnings = p.warnings.filter((w) => w.includes("may not match the OPT 1.4"));
   assertEquals(mappingWarnings.length, 1);
   assertMatch(mappingWarnings[0], /opt14Export/);
 });
@@ -317,7 +317,7 @@ Deno.test("prepareContribution: no ADL 1.4 mapping warning with opt14Export or e
     creatingSystemId: "cdr.example",
   });
   assertEquals(
-    withExport.warnings.filter((w) => w.includes("default code shift")).length,
+    withExport.warnings.filter((w) => w.includes("may not match the OPT 1.4")).length,
     0,
   );
 
@@ -340,7 +340,7 @@ Deno.test("prepareContribution: no ADL 1.4 mapping warning with opt14Export or e
     creatingSystemId: "cdr.example",
   });
   assertEquals(
-    withExplicit.warnings.filter((w) => w.includes("default code shift")).length,
+    withExplicit.warnings.filter((w) => w.includes("may not match the OPT 1.4")).length,
     0,
   );
 });

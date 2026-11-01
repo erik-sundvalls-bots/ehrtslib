@@ -619,31 +619,29 @@ export class CadlParser {
     return prim;
   }
 
+  /** `value matches {"a", "b"}`: a C_STRING value list (a `/regex/` is a pattern). */
   private tryParseStringConstraint(): openehr_am.C_PRIMITIVE_OBJECT | null {
     if (!this.check(TokenType.STRING)) return null;
     const prim = new openehr_am.C_PRIMITIVE_OBJECT();
-    prim.rm_type_name = "DV_TEXT";
+    prim.rm_type_name = "STRING";
     const str = new openehr_am.C_STRING();
-    str.pattern = this.advance().value.replace(/^["']|["']$/g, "");
-    prim.item = str;
-    while (this.check(TokenType.COMMA)) {
+    const list = [this.advance().value];
+    while (this.check(TokenType.COMMA) && this.checkAhead(TokenType.STRING, 1)) {
       this.advance();
-      if (this.check(TokenType.STRING)) {
-        str.pattern += "|" +
-          this.advance().value.replace(/^["']|["']$/g, "");
-      }
+      list.push(this.advance().value);
     }
+    (str as unknown as { list: string[] }).list = list;
+    prim.item = str;
     return prim;
   }
 
   /** `units matches {"mg", "kg"}` — do not collapse to a pipe-separated pattern. */
   private tryParseUnitListConstraint(): openehr_am.C_PRIMITIVE_OBJECT | null {
     if (!this.check(TokenType.STRING)) return null;
-    const strip = (raw: string) => raw.replace(/^["']|["']$/g, "");
-    const list = [strip(this.advance().value)];
+    const list = [this.advance().value];
     while (this.check(TokenType.COMMA) && this.checkAhead(TokenType.STRING, 1)) {
       this.advance();
-      list.push(strip(this.advance().value));
+      list.push(this.advance().value);
     }
     if (list.length < 2) return null;
     const prim = new openehr_am.C_PRIMITIVE_OBJECT();
@@ -1160,7 +1158,7 @@ export class CadlParser {
         const prim = new openehr_am.C_PRIMITIVE_OBJECT();
         prim.rm_type_name = "STRING";
         const str = new openehr_am.C_STRING();
-        str.pattern = this.advance().value.replace(/^["']|["']$/g, "");
+        str.pattern = this.advance().value;
         prim.item = str;
         obj = prim;
       }
@@ -1272,6 +1270,7 @@ export class CadlParser {
           this.advance();
           interval.lower = lower;
           interval.upper = undefined;
+          interval.upper_unbounded = true;
         } else if (this.check(TokenType.INTEGER)) {
           interval.lower = lower;
           interval.upper = parseInt(this.advance().value, 10);
@@ -1287,6 +1286,7 @@ export class CadlParser {
       this.advance();
       interval.lower = 0;
       interval.upper = undefined;
+      interval.upper_unbounded = true;
     } else {
       throw this.error("Expected multiplicity");
     }
@@ -1508,7 +1508,7 @@ export class CadlParser {
 
   private parseAssumedValueLiteral(): unknown {
     if (this.check(TokenType.STRING)) {
-      return this.advance().value.replace(/^["']|["']$/g, "");
+      return this.advance().value;
     }
     if (this.check(TokenType.REGEX)) {
       return this.advance().value;

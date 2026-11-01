@@ -12,6 +12,7 @@ import {
 import { replaceAtAomPath, resolveAomPath } from "../../am/util/aom_path_navigator.ts";
 import type { ArchetypeRepository } from "./archetype_repository.ts";
 import type { OetParseResult, OetRule, OetItem } from "./oet_xml_parser.ts";
+import { adl2CodingSystemOf, adl2VersionFor } from "./adl2_coding_system.ts";
 
 export interface OetCompileOptions {
   repository: ArchetypeRepository;
@@ -146,7 +147,10 @@ export function compileOetToOperational(
   for (const item of doc.items) applyItem(template.definition!, item, resolver, warnings, "");
 
   const operationalTemplate = flattenToOperationalTemplate(template, resolver);
-  operationalTemplate.adl_version = "2.0";
+  operationalTemplate.adl_version = adl2VersionFor(
+    adl2CodingSystemOf(operationalTemplate) ?? "id-coded",
+    "2.0",
+  );
   operationalTemplate.is_generated = true;
 
   warnings.push(...options.repository.getWarnings());

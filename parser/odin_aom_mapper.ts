@@ -12,9 +12,8 @@ export type TermDefinitionTable = Record<
 >;
 
 function odinString(value: OdinValue): string | undefined {
-  if (typeof value === "string") {
-    return value.replace(/^["']|["']$/g, "");
-  }
+  // String token values come without their quotes.
+  if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") {
     return String(value);
   }

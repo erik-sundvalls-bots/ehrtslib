@@ -8,7 +8,64 @@
  * date/time types). `|value` is accepted as a read alias for the bare key.
  */
 
+import type { WebTemplateNode } from "./types.ts";
+import { attributesFor, hasRmType } from "../../meta/rm_attributes.ts";
+import {
+  type CodedTextDisplayValue,
+  type CodedTextMismatch,
+  completeDvCodedText,
+  type FlatRmDefaultIssue,
+  throwOnCodedTextMismatch,
+} from "./flat_rm_defaults.ts";
+
 type RmObject = Record<string, unknown>;
+
+/** Code-list entry used to complete a partial DV_CODED_TEXT. */
+export interface CodedTextListEntry {
+  value: string;
+  label?: string;
+  terminology?: string;
+  localizedLabels?: Record<string, string>;
+}
+
+/**
+ * Template context for {@link buildDvValue} / {@link buildRmValue}.
+ * Without `node` or `codes`, coded text is not completed.
+ */
+export interface DvValueBuildContext {
+  /** Web Template node that carries the code list. */
+  node?: WebTemplateNode;
+  /** Code list used when `node` is omitted. */
+  codes?: CodedTextListEntry[];
+  /** Terminology id for `codes` when an entry does not set one. */
+  terminology?: string;
+  /** Composition language used to choose the rubric. */
+  language?: string;
+  /**
+   * Collects coded-text issues. When omitted, a mismatch error throws
+   * `CodedTextMismatchError` and warnings are dropped.
+   */
+  issues?: FlatRmDefaultIssue[];
+  /** Path attached to reported issues. */
+  path?: string;
+  /**
+   * Severity of a field the type has no FLAT form for (it would set
+   * nothing): `"error"` (default), `"warning"` or `"ignore"`. Reported only
+   * when {@link issues} is given.
+   */
+  unknownKeys?: "error" | "warning" | "ignore";
+  /**
+   * `|code`, `|value`, or bare key without an exact template match:
+   * `"reject"` (default), `"keep"`, or `"correct"`. See `CodedTextMismatch`.
+   */
+  codedTextMismatch?: CodedTextMismatch;
+  /**
+   * Valid `|code` with a `|value` that matches no listed term: `"keep"`
+   * (default), `"keep-and-set-preferred-term"`, or `"replace-with-rubric"`
+   * (not recommended; EHRbase compatibility). See `CodedTextDisplayValue`.
+   */
+  codedTextDisplayValue?: CodedTextDisplayValue;
+}
 
 export type FieldKind = "string" | "number" | "integer" | "boolean";
 
@@ -73,6 +130,7 @@ def("DV_CODED_TEXT", [
     inputType: "TEXT",
     intermediates: { defining_code: "CODE_PHRASE" },
   },
+  { suffix: "formatting", path: ["formatting"], kind: "string", inputType: "TEXT" },
 ]);
 
 def("CODE_PHRASE", [
@@ -120,6 +178,19 @@ def("DV_ORDINAL", [
 
 // --- Quantities & numbers ---------------------------------------------------
 
+const NORMAL_STATUS: FieldSpec = {
+  suffix: "normal_status",
+  path: ["normal_status", "code_string"],
+  kind: "string",
+  inputType: "TEXT",
+  intermediates: { normal_status: "CODE_PHRASE" },
+};
+const MAGNITUDE_STATUS: FieldSpec = { suffix: "magnitude_status", path: ["magnitude_status"], kind: "string", inputType: "TEXT" };
+const ACCURACY: FieldSpec[] = [
+  { suffix: "accuracy", path: ["accuracy"], kind: "number", inputType: "DECIMAL" },
+  { suffix: "accuracy_is_percent", path: ["accuracy_is_percent"], kind: "boolean", inputType: "BOOLEAN" },
+];
+
 def("DV_QUANTITY", [
   { suffix: "magnitude", path: ["magnitude"], kind: "number", inputType: "DECIMAL", required: true },
   { suffix: "unit", path: ["units"], kind: "string", inputType: "TEXT", required: true },
@@ -129,6 +200,7 @@ def("DV_QUANTITY", [
   { suffix: "accuracy_is_percent", path: ["accuracy_is_percent"], kind: "boolean", inputType: "BOOLEAN" },
   { suffix: "units_system", path: ["units_system"], kind: "string", inputType: "TEXT" },
   { suffix: "units_display_name", path: ["units_display_name"], kind: "string", inputType: "TEXT" },
+  NORMAL_STATUS,
 ]);
 
 def("DV_COUNT", [
@@ -136,6 +208,7 @@ def("DV_COUNT", [
   { suffix: "magnitude_status", path: ["magnitude_status"], kind: "string", inputType: "TEXT" },
   { suffix: "accuracy", path: ["accuracy"], kind: "number", inputType: "DECIMAL" },
   { suffix: "accuracy_is_percent", path: ["accuracy_is_percent"], kind: "boolean", inputType: "BOOLEAN" },
+  NORMAL_STATUS,
 ]);
 
 def("DV_PROPORTION", [
@@ -143,6 +216,9 @@ def("DV_PROPORTION", [
   { suffix: "denominator", path: ["denominator"], kind: "number", inputType: "DECIMAL", required: true },
   { suffix: "type", path: ["type"], kind: "integer", inputType: "INTEGER", required: true },
   { suffix: "precision", path: ["precision"], kind: "integer", inputType: "INTEGER" },
+  MAGNITUDE_STATUS,
+  ...ACCURACY,
+  NORMAL_STATUS,
 ]);
 
 // --- Booleans, dates, times -------------------------------------------------
@@ -153,18 +229,27 @@ def("DV_BOOLEAN", [
 
 def("DV_DATE", [
   { suffix: "", path: ["value"], kind: "string", inputType: "DATE", required: true },
+  MAGNITUDE_STATUS,
+  NORMAL_STATUS,
 ]);
 
 def("DV_DATE_TIME", [
   { suffix: "", path: ["value"], kind: "string", inputType: "DATETIME", required: true },
+  MAGNITUDE_STATUS,
+  NORMAL_STATUS,
 ]);
 
 def("DV_TIME", [
   { suffix: "", path: ["value"], kind: "string", inputType: "TIME", required: true },
+  MAGNITUDE_STATUS,
+  NORMAL_STATUS,
 ]);
 
 def("DV_DURATION", [
   { suffix: "", path: ["value"], kind: "string", inputType: "DURATION", required: true },
+  ...ACCURACY,
+  MAGNITUDE_STATUS,
+  NORMAL_STATUS,
 ]);
 
 // --- URIs, identifiers, parsable, multimedia --------------------------------
@@ -278,6 +363,20 @@ export function getFieldMap(rmType: string): DvFieldMap | undefined {
 }
 
 /** Fallback map for unknown types: single bare `value` field. */
+const PRIMITIVE_VALUE = /^(String|Integer|Integer64|Real|Double|Boolean|Character|Octet|Iso8601_\w+|URI)$/;
+
+/**
+ * {@link fallbackFieldMap} for a type whose `value` is a primitive (or an
+ * unknown type); no fields for a known type without one (DV_STATE,
+ * DV_PARAGRAPH, DV_SCALE), so a bare key is reported instead of building
+ * an invalid `value`.
+ */
+function fallbackFor(rmType: string): DvFieldMap {
+  if (!hasRmType(rmType)) return fallbackFieldMap(rmType);
+  const value = attributesFor(rmType).find((a) => a.name === "value");
+  return value && PRIMITIVE_VALUE.test(value.typeName) ? fallbackFieldMap(rmType) : { rmType, fields: [] };
+}
+
 export function fallbackFieldMap(rmType: string): DvFieldMap {
   return {
     rmType,
@@ -380,22 +479,140 @@ export function extractFields(
   return out;
 }
 
+function listedCodes(node: WebTemplateNode): CodedTextListEntry[] {
+  const out: CodedTextListEntry[] = [];
+  for (const input of node.inputs ?? []) {
+    if (input.suffix && input.suffix !== "code") continue;
+    for (const item of input.list ?? []) {
+      if (!item.value) continue;
+      out.push({
+        value: item.value,
+        label: item.label,
+        terminology: input.terminology,
+        localizedLabels: item.localizedLabels,
+      });
+    }
+  }
+  return out;
+}
+
+function nodeTerminology(node: WebTemplateNode): string | undefined {
+  return node.inputs?.find((input) => input.suffix === "code" || !input.suffix)
+    ?.terminology;
+}
+
+/** Minimal node so a bare code list can drive the same completion as a Web Template node. */
+function nodeFromContext(context: DvValueBuildContext): WebTemplateNode | undefined {
+  if (context.node) return context.node;
+  if (!context.codes?.length) return undefined;
+  const terminology = context.terminology ??
+    context.codes.find((code) => code.terminology)?.terminology;
+  return {
+    id: "value",
+    rmType: "DV_CODED_TEXT",
+    min: 0,
+    max: 1,
+    aqlPath: context.path ?? "/",
+    inputs: [{
+      type: "CODED_TEXT",
+      suffix: "code",
+      terminology,
+      list: context.codes.map((code) => ({
+        value: code.value,
+        label: code.label,
+        localizedLabels: code.localizedLabels,
+      })),
+    }],
+  };
+}
+
+/**
+ * Bare DV_CODED_TEXT key: a listed code is `|code`, otherwise `|value`.
+ * Text that equals no code or rubric exactly but one code ignoring case is
+ * read as that `|code` as sent, so the mismatch mode applies to it.
+ * Does nothing when the caller already set `|code` or `|value`.
+ */
+function interpretCodedTextBareField(
+  fields: Record<string, string | number | boolean | null | undefined>,
+  codes: CodedTextListEntry[],
+  terminology?: string,
+): Record<string, string | number | boolean | null | undefined> {
+  const bare = fields[""];
+  if (bare == null || fields.code != null || fields.value != null) return fields;
+  const text = String(bare);
+  const lower = text.toLowerCase();
+  const isRubric = codes.some((code) =>
+    code.label === text ||
+    Object.values(code.localizedLabels ?? {}).includes(text)
+  );
+  const folded = codes.filter((code) => code.value.toLowerCase() === lower);
+  const codeHit = codes.find((code) => code.value === text) ??
+    (!isRubric && folded.length === 1
+      ? { ...folded[0], value: text }
+      : undefined);
+  const rest: Record<string, string | number | boolean | null | undefined> = {
+    ...fields,
+  };
+  delete rest[""];
+  if (codeHit) {
+    const next: Record<string, string | number | boolean | null | undefined> = {
+      ...rest,
+      code: codeHit.value,
+    };
+    if (
+      next.terminology == null && terminology &&
+      terminology.toLowerCase() !== "local" &&
+      terminology.toLowerCase() !== "openehr"
+    ) {
+      next.terminology = terminology;
+    }
+    return next;
+  }
+  return { ...rest, value: text };
+}
+
 /**
  * Build an RM data value object (plain, with `_type` markers) from
  * simplified-format fields keyed by suffix ("" = bare).
+ *
+ * When `context` carries a Web Template node or code list, a bare
+ * DV_CODED_TEXT value is read as `|code` or `|value` and the missing half is
+ * filled for local / openEHR lists. Input without an exact template match is
+ * handled per `context.codedTextMismatch` (default `"reject"`); without a
+ * `context.issues` array a mismatch error throws `CodedTextMismatchError`.
+ * Without a node or code list the bare key is not turned into a code.
  */
 export function buildDvValue(
   rmType: string,
   fields: Record<string, string | number | boolean | null | undefined>,
+  context?: DvValueBuildContext,
 ): RmObject {
   const resolved = resolveDvType(rmType);
-  const map = getFieldMap(resolved) ?? fallbackFieldMap(resolved);
+  const codedNode = context ? nodeFromContext(context) : undefined;
+  const source = codedNode && resolved === "DV_CODED_TEXT"
+    ? interpretCodedTextBareField(
+      fields,
+      listedCodes(codedNode),
+      nodeTerminology(codedNode),
+    )
+    : fields;
+  const map = getFieldMap(resolved) ?? fallbackFor(resolved);
   const root: RmObject = { _type: resolved };
+  const consumed = new Set<string>(["_type"]);
 
   for (const field of map.fields) {
-    let value = fields[field.suffix];
+    let value = source[field.suffix];
+    consumed.add(field.suffix);
     // `|value` is a read alias for the bare suffix
-    if (value == null && field.suffix === "") value = fields.value;
+    if (value == null && field.suffix === "") {
+      value = source.value;
+      consumed.add("value");
+    }
+    // DV_IDENTIFIER: the bare key is a read alias for `|id` (as EHRbase reads it)
+    if (value == null && resolved === "DV_IDENTIFIER" && field.suffix === "id") {
+      value = source[""];
+      consumed.add("");
+    }
     if (value == null) continue;
     const coerced = coerce(value, field.kind);
     if (coerced === undefined) continue;
@@ -413,10 +630,60 @@ export function buildDvValue(
     current[field.path[field.path.length - 1]] = coerced;
   }
 
+  // A key that sets nothing is reported, never dropped silently.
+  const mode = context?.unknownKeys ?? "error";
+  if (context?.issues && mode !== "ignore") {
+    for (const [k, v] of Object.entries(source)) {
+      if (v == null || consumed.has(k)) continue;
+      context.issues.push({
+        path: `${context.path ?? context.node?.aqlPath ?? ""}${k ? `|${k}` : ""}`,
+        severity: mode,
+        kind: "unknown-key",
+        message: k
+          ? `${resolved} has no FLAT field "|${k}"; ignored`
+          : `${resolved} has no bare FLAT value; ignored (use its fields or _<attribute> paths)`,
+      });
+    }
+  }
+
   // Apply build defaults (e.g. default terminology) when the owning object
   // was created but the defaulted leaf is missing.
   applyBuildDefaults(resolved, root, map);
+  applyPartyType(resolved, root, source._type);
+  if (codedNode && root._type === "DV_CODED_TEXT") {
+    const issues = context?.issues ?? [];
+    completeDvCodedText(
+      root,
+      codedNode,
+      issues,
+      context?.path ?? codedNode.aqlPath,
+      context?.language,
+      {
+        mismatch: context?.codedTextMismatch,
+        displayValue: context?.codedTextDisplayValue,
+      },
+    );
+    if (!context?.issues) throwOnCodedTextMismatch(issues);
+  }
   return root;
+}
+
+const PARTY_PROXY_SUBTYPES = new Set([
+  "PARTY_SELF",
+  "PARTY_IDENTIFIED",
+  "PARTY_RELATED",
+]);
+
+/**
+ * `|_type` at a PARTY_PROXY path selects the subtype (e.g. `composer|_type:
+ * "PARTY_SELF"`); PARTY_SELF has no name.
+ */
+function applyPartyType(rmType: string, root: RmObject, type: unknown): void {
+  if (!rmType.startsWith("PARTY_") || type == null) return;
+  const t = String(type);
+  if (!PARTY_PROXY_SUBTYPES.has(t)) return;
+  root._type = t;
+  if (t === "PARTY_SELF") delete root.name;
 }
 
 function applyBuildDefaults(
@@ -424,6 +691,11 @@ function applyBuildDefaults(
   root: RmObject,
   map: DvFieldMap,
 ): void {
+  // Spec: `|normal_status` carries only the code; the terminology is openEHR's.
+  const ns = root.normal_status as RmObject | undefined;
+  if (ns && ns.code_string != null && ns.terminology_id == null) {
+    ns.terminology_id = { _type: "TERMINOLOGY_ID", value: "openehr_normal_statuses" };
+  }
   if (rmType === "DV_CODED_TEXT") {
     const dc = root.defining_code as RmObject | undefined;
     if (dc && dc.code_string != null && dc.terminology_id == null) {

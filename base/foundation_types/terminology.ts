@@ -5,7 +5,9 @@
 
 import { TYPE_REGISTRY } from "../_shared.ts";
 import { TERMINOLOGY_ID } from "../base_types/identification.ts";
+import { applyRmInit, type RmInit } from "../apply_rm_init.ts";
 import { Any } from "./foundation_types.ts";
+import { matchTerseCodePhrase } from "../../serialization/terse_strings.ts";
 import { Boolean, String } from "./primitive_types.ts";
 import type { Uri } from "./primitive_types.ts";
 
@@ -236,6 +238,30 @@ export class Terminology_term extends Any {
  * path is unchanged so existing imports keep working.
  */
 export class CODE_PHRASE {
+  /**
+   * Object init matches the RM `CODE_PHRASE` constructor. The TypeScript
+   * serializer imports this BASE class. A terse `terminology::code` string
+   * is accepted too. `undefined` leaves the instance empty.
+   */
+  constructor(init?: string | RmInit) {
+    if (typeof init === "string") {
+      // Same parse as init_helpers `initCodePhrase`, without importing it
+      // (init_helpers imports the RM, which imports this module).
+      const parts = matchTerseCodePhrase(init);
+      if (!parts) {
+        throw new Error(
+          `Invalid CODE_PHRASE format: "${init}"\nExpected terse format like "terminology::code"`,
+        );
+      }
+      const terminologyId = new TERMINOLOGY_ID();
+      terminologyId.value = parts.termId;
+      this.terminology_id = terminologyId;
+      this.code_string = parts.code;
+      return;
+    }
+    applyRmInit(this, init);
+  }
+
   /**
    * Identifier of the distinct terminology from which the code_string (or its elements) was extracted.
    */

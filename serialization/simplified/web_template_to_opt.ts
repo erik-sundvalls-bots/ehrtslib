@@ -27,6 +27,7 @@
 
 import * as openehr_am from "../../am/openehr_am.ts";
 import * as openehr_base from "../../base/openehr_base.ts";
+import { aqlPathSegments } from "./normalize.ts";
 import type {
   QuantityItemInterval,
   QuantityItemRuntime,
@@ -82,11 +83,7 @@ interface AqlSegment {
 }
 
 function parseAqlPath(aqlPath: string): AqlSegment[] {
-  const segments = aqlPath.replace(/\/+/g, "/").match(/\/[^/]+/g) ?? [];
-  return segments.map((raw) => {
-    const m = /^\/([^[]+)(?:\[([^\]]+)\])?$/.exec(raw)!;
-    return { attr: m[1], nodeId: m[2] };
-  });
+  return aqlPathSegments(aqlPath).map(({ attr, nodeId }) => ({ attr, nodeId }));
 }
 
 function isArchetypeId(nodeId?: string): boolean {
@@ -193,6 +190,12 @@ export class WebTemplateToOptConverter {
       // real constraints; re-insert them so the OPT round-trips. Only the
       // builder's unconditional defaults are skipped.
       if (child.inContext && DEFAULT_CTX_PATHS.has(child.aqlPath)) continue;
+      // EVENT_CONTEXT with only RM attributes (start_time, setting) has no
+      // template constraint of its own.
+      if (
+        child.rmType === "EVENT_CONTEXT" &&
+        !(child.children ?? []).some((c) => !c.inContext)
+      ) continue;
       this.insertNode(root, child, 0);
     }
 

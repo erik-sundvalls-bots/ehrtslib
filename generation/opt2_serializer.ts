@@ -18,6 +18,7 @@ import {
   getRmOverlayVisibility,
 } from "../parser/aom_odin_sections.ts";
 import { serializeRulesSection } from "../parser/rules_serializer.ts";
+import { withSyntheticNodeIdAnnotations } from "../parser/synthetic_node_annotations.ts";
 import {
   archetypeTermBagsForLanguage,
   type OperationalTemplateWithTermScopes,
@@ -26,13 +27,18 @@ import {
   TERM_NAME_FALLBACK_NODE_ID_KEY,
 } from "./term_scope.ts";
 import { resolveTemplateLanguage } from "./term_codes.ts";
-import type { TermBag } from "../am/util/ontology_merge.ts";
+import { readTemplateId, type TermBag } from "../am/util/ontology_merge.ts";
 import { filterOperationalTemplateLanguages } from "./opt2_trim.ts";
 import {
   type Adl2CodingOptions,
   opt14NodeIdToAdl2,
   opt14TerminologyKeyToAdl2,
+  resolveAdl2CodingSystem,
 } from "../parser/legacy/opt14_code_mapping.ts";
+import {
+  adl2CodingSystemOf,
+  adl2VersionFor,
+} from "../parser/legacy/adl2_coding_system.ts";
 
 /** Options for {@link OPT2Serializer.serializeOperationalTemplate}. */
 export interface Opt2SerializeOptions extends Adl2CodingOptions {
@@ -51,6 +57,11 @@ export interface Opt2SerializeOptions extends Adl2CodingOptions {
   inlineTermLabels?: boolean;
   /** Language for {@link Opt2SerializeOptions.inlineTermLabels}; defaults to first `languages` entry or template primary. */
   inlineTermLabelLanguage?: string;
+  /**
+   * Write a `synthetic_node_id` annotation for each minted node id, so a
+   * re-parse knows to leave it out of data paths (default true).
+   */
+  syntheticNodeIdAnnotations?: boolean;
 }
 
 export interface CadlLabelContext {
@@ -119,12 +130,18 @@ export class OPT2Serializer extends ADL2Serializer {
 
     const indent = this.config.indent || "    ";
     let adl = "operational_template";
-    const adlVer = options?.adlVersion ?? "2.0.5";
+    // id-coded input stays id-coded; 1.4 / at-coded nodes are written in the
+    // requested coding system (at-coded by default).
+    const outCoding = adl2CodingSystemOf(working) === "id-coded"
+      ? "id-coded"
+      : resolveAdl2CodingSystem(options);
+    const adlVer = options?.adlVersion ?? adl2VersionFor(outCoding, "2.0.5");
     const rmRel = options?.rmRelease ?? working.rm_release ?? "1.0.4";
     adl += ` (adl_version=${adlVer}; rm_release=${rmRel})`;
     adl += "\n";
 
-    const templateId = working.template_id ?? working.archetype_id?.value;
+    const rawTemplateId = readTemplateId(working) ?? working.archetype_id?.value;
+    const templateId = rawTemplateId && adl2IdText(rawTemplateId);
     if (templateId) {
       adl += `    ${templateId}\n\n`;
     }
@@ -140,7 +157,13 @@ export class OPT2Serializer extends ADL2Serializer {
       indent,
       translations as OdinValue | undefined,
     );
-    adl += serializeDescriptionSection(working.description, indent);
+    // An OPT 1.4 template_id that is not a valid ADL id (e.g. one with
+    // spaces) is kept in description.other_details["template_id"].
+    adl += serializeDescriptionSection(
+      working.description,
+      indent,
+      rawTemplateId && templateId !== rawTemplateId ? { template_id: rawTemplateId } : undefined,
+    );
 
     adl += "definition\n";
     if (working.definition) {
@@ -168,10 +191,14 @@ export class OPT2Serializer extends ADL2Serializer {
       indent,
     );
 
-    adl += serializeAnnotationsSection(
-      getAnnotationsDocumentation(working),
-      indent,
-    );
+    const documentation = options?.syntheticNodeIdAnnotations === false
+      ? getAnnotationsDocumentation(working)
+      : withSyntheticNodeIdAnnotations(
+        getAnnotationsDocumentation(working),
+        working,
+        (id) => this.formatNodeId(id),
+      );
+    adl += serializeAnnotationsSection(documentation, indent);
     adl += serializeRmOverlaySection(
       getRmOverlayVisibility(working),
       indent,
@@ -317,4 +344,10 @@ export function opt2SizeMetrics(
     opt2Lines,
     lineRatio: xmlLines / Math.max(opt2Lines, 1),
   };
+}
+
+/** An id the ADL2 tokenizer reads as one token: invalid characters become `_`. */
+export function adl2IdText(id: string): string {
+  const text = id.trim().replace(/[^A-Za-z0-9_.-]+/g, "_");
+  return /^[A-Za-z]/.test(text) ? text : `t_${text}`;
 }

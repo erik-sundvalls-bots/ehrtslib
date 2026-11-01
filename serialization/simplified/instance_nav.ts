@@ -3,7 +3,10 @@
  */
 
 import { TypeRegistry } from "../common/type_registry.ts";
+import { hasRmType, isSubtypeOf } from "../../meta/mod.ts";
+import { nodeIdsMatch } from "../../generation/id_to_at_code.ts";
 import type { WebTemplateNode } from "./types.ts";
+import { type AqlPathSegment, aqlPathSegments } from "./normalize.ts";
 
 type RmObject = Record<string, unknown>;
 
@@ -34,32 +37,42 @@ function rmProp(obj: unknown, key: string): unknown {
   return undefined;
 }
 
-function normalizeNodeId(id: string): string {
-  if (/^id\d/i.test(id)) {
-    const digits = id.replace(/^id/i, "").replace(/\./g, "");
-    return `at${digits.padStart(4, "0")}`;
-  }
-  return id;
+/**
+ * True for RM types known not to be LOCATABLE (e.g. ISM_TRANSITION). They have
+ * no archetype_node_id, so a template path predicate cannot be checked on them.
+ */
+function isNonLocatable(obj: unknown): boolean {
+  const type = rmTypeName(obj);
+  return !!type && hasRmType(type) && !isSubtypeOf(type, "LOCATABLE");
 }
 
-function nodeIdsMatch(a: unknown, b: string): boolean {
-  if (a == null) return false;
-  const sa = String(a);
-  return sa === b || normalizeNodeId(sa) === normalizeNodeId(b);
+/** `name.value` of an RM object, as a string. */
+function nameValueOf(obj: unknown): string | undefined {
+  const value = rmProp(rmProp(obj, "name"), "value");
+  return value == null ? undefined : String(value);
 }
 
-function pickByNodeId(arr: unknown[], nodeId: string): unknown {
-  const found = arr.find((item) =>
-    nodeIdsMatch(rmProp(item, "archetype_node_id"), nodeId)
-  );
-  return found ?? arr[0];
+/** The object matches the segment's node id and `name/value` predicate. */
+function matchesSegment(obj: unknown, seg: AqlPathSegment): boolean {
+  if (!seg.nodeId) return true;
+  if (!nodeIdsMatch(rmProp(obj, "archetype_node_id"), seg.nodeId)) return false;
+  return seg.nameValue === undefined || nameValueOf(obj) === seg.nameValue;
 }
 
-function valuesByNodeId(arr: unknown[], nodeId?: string): unknown[] {
-  if (!nodeId) return arr;
-  const found = arr.filter((item) =>
-    nodeIdsMatch(rmProp(item, "archetype_node_id"), nodeId)
-  );
+/** A single-valued attribute object matches the segment's predicate. */
+function singleMatchesSegment(obj: unknown, seg: AqlPathSegment): boolean {
+  const id = rmProp(obj, "archetype_node_id");
+  if (id == null || id === "") return isNonLocatable(obj);
+  return matchesSegment(obj, seg);
+}
+
+function pickBySegment(arr: unknown[], seg: AqlPathSegment): unknown {
+  return arr.find((item) => matchesSegment(item, seg)) ?? arr[0];
+}
+
+function valuesBySegment(arr: unknown[], seg: AqlPathSegment): unknown[] {
+  if (!seg.nodeId) return arr;
+  const found = arr.filter((item) => matchesSegment(item, seg));
   if (found.length) return found;
   // Fall back to unmatched items only when none of them carry a node id at
   // all (e.g. hand-built instances); otherwise a wrong-node match would
@@ -71,10 +84,45 @@ function valuesByNodeId(arr: unknown[], nodeId?: string): unknown[] {
   return anyIds ? [] : arr.slice(0, 1);
 }
 
-function filterByRmType(values: unknown[], rmType?: string): unknown[] {
+/** A resolved value and, for a leaf below an ELEMENT, that ELEMENT. */
+export interface ResolvedValue {
+  value: unknown;
+  /** The ELEMENT whose `value` this is (absent for other values). */
+  element?: RmObject;
+}
+
+function filterPairsByRmType(values: ResolvedValue[], rmType?: string): ResolvedValue[] {
   if (!rmType) return values;
-  const filtered = values.filter((item) => rmTypeName(item) === rmType);
+  const filtered = values.filter((item) => rmTypeName(item.value) === rmType);
   return filtered.length ? filtered : values;
+}
+
+/**
+ * Like {@link resolveChildWebTemplateNodes}, with the ELEMENT of each leaf
+ * value (for its own attributes such as `uid`, `links`, `feeder_audit`).
+ */
+export function resolveChildWebTemplateNodeValues(
+  rootInstance: unknown,
+  parentInstance: unknown,
+  parentNode: WebTemplateNode,
+  childNode: WebTemplateNode,
+): ResolvedValue[] {
+  const parentPath = parentNode.aqlPath ?? "/";
+  const childPath = childNode.aqlPath ?? "/";
+
+  if (parentPath === "/" || parentPath === "") {
+    return resolveAllValuesAtWebTemplateNode(rootInstance, childNode);
+  }
+
+  if (childPath.startsWith(parentPath)) {
+    const relative = childPath.slice(parentPath.length);
+    const relativePath = relative.startsWith("/") ? relative : `/${relative}`;
+    return filterPairsByRmType(resolveAllValuesAtPath(parentInstance, relativePath), childNode.rmType);
+  }
+
+  // Child path is not under the parent path (e.g. sibling attribute);
+  // resolve it absolutely from the root instance.
+  return resolveAllValuesAtWebTemplateNode(rootInstance, childNode);
 }
 
 /** Resolve child template nodes relative to a parent instance slice. */
@@ -84,23 +132,19 @@ export function resolveChildWebTemplateNodes(
   parentNode: WebTemplateNode,
   childNode: WebTemplateNode,
 ): unknown[] {
-  const parentPath = parentNode.aqlPath ?? "/";
-  const childPath = childNode.aqlPath ?? "/";
+  return resolveChildWebTemplateNodeValues(rootInstance, parentInstance, parentNode, childNode)
+    .map((r) => r.value);
+}
 
-  if (parentPath === "/" || parentPath === "") {
-    return resolveAllAtWebTemplateNode(rootInstance, childNode);
-  }
-
-  if (childPath.startsWith(parentPath)) {
-    const relative = childPath.slice(parentPath.length);
-    const relativePath = relative.startsWith("/") ? relative : `/${relative}`;
-    const values = resolveAllAtPath(parentInstance, relativePath);
-    return filterByRmType(values, childNode.rmType);
-  }
-
-  // Child path is not under the parent path (e.g. sibling attribute);
-  // resolve it absolutely from the root instance.
-  return resolveAllAtWebTemplateNode(rootInstance, childNode);
+/** Like {@link resolveAllAtWebTemplateNode}, with the ELEMENT of each leaf value. */
+export function resolveAllValuesAtWebTemplateNode(
+  instance: unknown,
+  node: WebTemplateNode,
+): ResolvedValue[] {
+  const values = node.aqlPath === "/"
+    ? [{ value: instance }]
+    : resolveAllValuesAtPath(instance, node.aqlPath);
+  return filterPairsByRmType(values, node.rmType);
 }
 
 /** Resolve instance data for a Web Template node, filtering by rmType when needed. */
@@ -108,10 +152,7 @@ export function resolveAllAtWebTemplateNode(
   instance: unknown,
   node: WebTemplateNode,
 ): unknown[] {
-  const values = node.aqlPath === "/"
-    ? [instance]
-    : resolveAllAtPath(instance, node.aqlPath);
-  return filterByRmType(values, node.rmType);
+  return resolveAllValuesAtWebTemplateNode(instance, node).map((r) => r.value);
 }
 
 /**
@@ -120,16 +161,13 @@ export function resolveAllAtWebTemplateNode(
 export function resolveAtPath(instance: unknown, aqlPath: string): unknown {
   if (!instance || !aqlPath) return null;
 
-  const normalized = aqlPath.replace(/\/+/g, "/");
-  const segments = normalized.match(/\/[^/]+/g);
-  if (!segments?.length) return instance;
+  const segments = aqlPathSegments(aqlPath);
+  if (!segments.length) return instance;
 
   let current: unknown = instance;
 
-  for (const raw of segments) {
-    const m = /^\/([^[]+)(?:\[([^\]]+)\])?$/.exec(raw);
-    if (!m) continue;
-    const [, attr, nodeId] = m;
+  for (const seg of segments) {
+    const { attr } = seg;
     const obj = current as RmObject;
     if (!obj || typeof obj !== "object") return null;
 
@@ -137,7 +175,7 @@ export function resolveAtPath(instance: unknown, aqlPath: string): unknown {
     if (next == null) return null;
 
     if (Array.isArray(next)) {
-      current = nodeId ? pickByNodeId(next, nodeId) : next[0];
+      current = seg.nodeId ? pickBySegment(next, seg) : next[0];
     } else {
       current = next;
     }
@@ -161,18 +199,23 @@ export function resolveAllAtPath(
   instance: unknown,
   aqlPath: string,
 ): unknown[] {
+  return resolveAllValuesAtPath(instance, aqlPath).map((r) => r.value);
+}
+
+/** Like {@link resolveAllAtPath}, with the ELEMENT of each unwrapped value. */
+export function resolveAllValuesAtPath(
+  instance: unknown,
+  aqlPath: string,
+): ResolvedValue[] {
   if (!instance || !aqlPath) return [];
 
-  const normalized = aqlPath.replace(/\/+/g, "/");
-  const segments = normalized.match(/\/[^/]+/g);
-  if (!segments?.length) return [instance];
+  const segments = aqlPathSegments(aqlPath);
+  if (!segments.length) return [{ value: instance }];
 
   let current: unknown[] = [instance];
 
-  for (const raw of segments) {
-    const m = /^\/([^[]+)(?:\[([^\]]+)\])?$/.exec(raw);
-    if (!m) continue;
-    const [, attr, nodeId] = m;
+  for (const seg of segments) {
+    const { attr } = seg;
     const nextValues: unknown[] = [];
 
     for (const item of current) {
@@ -182,9 +225,9 @@ export function resolveAllAtPath(
       if (next == null) continue;
 
       if (Array.isArray(next)) {
-        nextValues.push(...valuesByNodeId(next, nodeId));
+        nextValues.push(...valuesBySegment(next, seg));
       } else if (
-        !nodeId || nodeIdsMatch(rmProp(next, "archetype_node_id"), nodeId)
+        !seg.nodeId || singleMatchesSegment(next, seg)
       ) {
         nextValues.push(next);
       }
@@ -196,9 +239,9 @@ export function resolveAllAtPath(
 
   return current.map((item) => {
     if (rmTypeName(item) === "ELEMENT" && rmProp(item, "value") != null) {
-      return rmProp(item, "value");
+      return { value: rmProp(item, "value"), element: item as RmObject };
     }
-    return item;
+    return { value: item };
   });
 }
 

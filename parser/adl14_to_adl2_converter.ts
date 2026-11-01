@@ -16,8 +16,10 @@ import {
   opt14TerminologyKeyToAdl2,
   resolveAdl2CodingSystem,
 } from "./legacy/opt14_code_mapping.ts";
+import { adl2VersionFor } from "./legacy/adl2_coding_system.ts";
 
 export interface Adl14ConversionOptions extends Adl2CodingOptions {
+  /** Header `adl_version`; default `2.4.0` when at-coded, `2.0.6` when id-coded. */
   targetAdlVersion?: string;
   rmRelease?: string;
   /** Mark output as machine-converted (openEHR `generated` metadata flag). */
@@ -30,10 +32,12 @@ export interface Adl14ConversionResult {
   warnings: string[];
 }
 
-const DEFAULT_OPTS: Required<
-  Pick<Adl14ConversionOptions, "targetAdlVersion" | "rmRelease" | "markGenerated">
+const DEFAULT_OPTS: Omit<
+  Required<
+    Pick<Adl14ConversionOptions, "targetAdlVersion" | "rmRelease" | "markGenerated">
+  >,
+  "targetAdlVersion"
 > = {
-  targetAdlVersion: "2.0.6",
   rmRelease: "1.0.4",
   markGenerated: true,
 };
@@ -45,7 +49,12 @@ export function convertAdl14ToAdl2(
   source: string,
   options?: Adl14ConversionOptions,
 ): Adl14ConversionResult {
-  const opts = { ...DEFAULT_OPTS, ...options };
+  const opts = {
+    ...DEFAULT_OPTS,
+    ...options,
+    targetAdlVersion: options?.targetAdlVersion ??
+      adl2VersionFor(resolveAdl2CodingSystem(options), "2.0.6"),
+  };
   const warnings: string[] = [];
   const version = detectAdlVersion(source);
 

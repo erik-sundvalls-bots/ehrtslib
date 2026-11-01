@@ -56,7 +56,7 @@ export interface CommitConfig {
   builderName?: string;
   /** Builder version; default the ehrtslib release. */
   builderVersion?: string;
-  /** CRDT library behind the log adapter; default none (single-app adapter). */
+  /** CRDT library behind the log adapter; default none (single-caller adapter). */
   crdtLibrary?: { name: string; version: string };
   /** Do not warn when the caller gives no `originatingSystemAudit`. */
   silenceMissingOriginatingAudit?: boolean;
@@ -238,11 +238,11 @@ export async function prepareContribution(
     changeTypes.add(changeType);
     let data = build.toCanonicalJson(d.draftId) as Obj;
     if ((config.codes ?? "adl14") === "adl14") {
-      const down = downConvertToAdl14(
-        data,
-        info.templateBinding,
-        d.adl14,
-      );
+      // The bound template gives the per-archetype ADL 1.4 code map (#252).
+      const down = downConvertToAdl14(data, info.templateBinding, {
+        operationalTemplate: d.template.operationalTemplate,
+        ...d.adl14,
+      });
       warnings.push(...down.warnings.map((w) => `${d.draftId}: ${w}`));
       data = down.data as Obj;
     }

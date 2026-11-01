@@ -6,7 +6,7 @@ Builds on [ADR 0011](0011-cb-optional-graphql-api.md).
 
 ## Context
 
-Apps want to create and change CB content in the format they already use:
+Apps want to create and change Contribution Builder content in the format they already use:
 GraphQL, the Simplified Formats (FLAT and STRUCTURED JSON), canonical XML,
 or server-rendered HTML. Most users need only one of these, so bundling all
 of them would bloat every app.
@@ -51,7 +51,7 @@ the address resolver from ADR 0011.
     to XPath predicates on `archetype_node_id` and `name`, and uids map to
     predicates on `uid/value`.
   - Created and patched documents can also be checked against the ITS-XML
-    XSDs, in addition to the CB's own template validation.
+    XSDs, in addition to the Contribution Builder's own template validation.
   - This is a separate format, not GraphQL. Selectors resolve through the
     same core resolver as ADR 0011 addresses.
 - **htmx package (future):** server-side helpers for HTML forms driven by
@@ -74,7 +74,7 @@ the address resolver from ADR 0011.
 
 ## Alternatives considered
 
-- **One big CB bundle with every format.** Rejected: bloat for most users.
+- **One big Contribution Builder bundle with every format.** Rejected: bloat for most users.
 - **JSON Patch (RFC 6902) for STRUCTURED.** Possible, but its array-index
   paths are fragile under concurrent edits. Merge Patch with Web Template
   keys fits better. JSON Patch can be added later if asked for.
@@ -92,4 +92,5 @@ the address resolver from ADR 0011.
    1.0, or only the subset that maps one-to-one onto archetype paths and
    uids?
 4. **htmx scope:** only server-side helpers, or also a small client-side
-   extension, and should it be tied to the CDR proxy?
+   extension, and should it be tied to the CDR proxy? Proposed answer in
+   [ADR 0014](0014-cb-htmx-add-on-and-editable-zipehr-html5.md).

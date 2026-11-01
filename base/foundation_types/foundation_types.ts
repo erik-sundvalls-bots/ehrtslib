@@ -4,12 +4,28 @@
 // but re-run the splitter rather than hand-moving declarations between packages.
 
 import { TYPE_REGISTRY } from "../_shared.ts";
+import { rmInitLate } from "../rm_init_late.ts";
 import { Boolean, String } from "./primitive_types.ts";
 
 /**
  * Abstract ancestor class for all other classes. Usually maps to a type like \`Any\` or \`Object\` in an object-oriented technology. Defined here to provide value and reference equality semantics.
  */
 export abstract class Any {
+  /**
+   * Optional init is applied only when an argument is passed.
+   * `undefined` is a no-op so primitive wrappers can keep calling `super()`.
+   * `applyRmInit` is late-bound (`rm_init_late.ts`), so this file does not
+   * import `rm/` or `meta/` while it is still evaluating.
+   */
+  constructor(init?: unknown) {
+    if (init === undefined || init === null) return;
+    const applyRmInit = rmInitLate.applyRmInit;
+    if (!applyRmInit) {
+      throw new Error("ehrtslib apply_rm_init.ts is not loaded; import base/mod.ts or openehr_base.ts");
+    }
+    applyRmInit(this, init);
+  }
+
   /**
    * Value equality: return True if \`this\` and \`_other_\` are attached to objects considered to be equal in value.
    * @param other - Parameter
