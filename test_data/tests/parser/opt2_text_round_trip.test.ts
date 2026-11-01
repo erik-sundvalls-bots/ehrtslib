@@ -55,7 +55,6 @@ for (const name of fixtures) {
     Deno.test(`OPT2 text round trip keeps the Web Template: ${name} (${coding})`, () => {
       const xml = Deno.readTextFileSync(new URL(name, DIR));
       const opt = parseOptXml(xml).operationalTemplate;
-      if (!opt.definition) return; // not a complete OPT
       const adl2 = upconvertOpt14ToAdl2(opt, readOpt14Header(xml), {
         adl2CodingSystem: coding,
       })
