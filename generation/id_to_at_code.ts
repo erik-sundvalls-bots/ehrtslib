@@ -3,6 +3,8 @@
  * @see https://github.com/ErikSundvall/ehrtslib/issues/116
  */
 
+import { parseTermBinding } from "./term_binding.ts";
+
 const ID_OR_AC = /^(id|ac|at)(\d+)((?:\.\d+)*)$/i;
 
 /**
@@ -27,6 +29,24 @@ export function idToAtCode(code: string | undefined | null): string {
   return `at${first}${m[3] ?? ""}`;
 }
 
+/**
+ * Node id as the at-code RM data carries in `archetype_node_id` and AQL
+ * paths: id-codes map by {@link idToAtCode} (`id1` → `at0000`,
+ * `id1.1` → `at0000.1`); at-codes and other ids are returned unchanged.
+ */
+export function nodeIdToAtCode(nodeId: string | undefined | null): string {
+  if (!nodeId) return "";
+  return /^id\d/i.test(nodeId) ? idToAtCode(nodeId) : nodeId;
+}
+
+/** True when two node ids name the same node in either ADL2 coding system. */
+export function nodeIdsMatch(a: unknown, b: unknown): boolean {
+  if (a == null || b == null || a === "" || b === "") return false;
+  const sa = String(a).trim();
+  const sb = String(b).trim();
+  return sa === sb || nodeIdToAtCode(sa) === nodeIdToAtCode(sb);
+}
+
 /** Term table shape: language → code → term (text/description/…). */
 export type Adl2TermTable = Record<string, Record<string, Record<string, unknown> | undefined> | undefined>;
 
@@ -35,35 +55,72 @@ export interface Adl14CodeMapOptions {
   normalise?: (code: string) => string;
   /** ADL2 term_definitions, used to detect identical node/value terms and synthetic ids. */
   terms?: Adl2TermTable;
-  /** Called for every renumbered or dropped node id. */
+  /**
+   * RM type of each node id (`id19` → `ELEMENT`). Node ids of types that are
+   * not LOCATABLE (DV_*, CODE_PHRASE, …) are dropped: they had no node id in
+   * ADL 1.4 and never reach data. A node id without a type counts as LOCATABLE.
+   */
+  nodeTypes?: ReadonlyMap<string, string>;
+  /** Term bindings (`terminology → code → target`) of the archetype. */
+  bindings?: Record<string, Record<string, string>>;
+  /**
+   * Write a colliding or converter-created value code that has an external
+   * binding back as that code (`openehr::128`) (default true). When false,
+   * such a code moves to `at9000+` like any other colliding value code.
+   */
+  externalCodes?: boolean;
+  /** Called for every moved value code. */
   warn?: (message: string) => void;
 }
 
 /** Marker for a node id that is dropped in ADL 1.4 (no `[code]` emitted). */
 export const DROPPED_NODE_ID = "";
 
+/** Term text the ADL Workbench post-parse processor gives the codes it adds. */
+const POST_PARSE_TERM = /added by post-parse processor/i;
+
+/** `terminology::code` map target for a value code written back as an external code. */
+export function externalCodeOf(target: string | undefined): { terminology: string; code: string } | undefined {
+  const m = target ? /^([^:]+)::(.+)$/.exec(target) : null;
+  return m ? { terminology: m[1], code: m[2] } : undefined;
+}
+
+/** Types whose node ids appear in RM data (`archetype_node_id`) and paths. */
+function isLocatableType(rmType: string | undefined): boolean {
+  if (!rmType) return true;
+  const base = rmType.replace(/<.*$/, "");
+  return !(/^DV_|^C_DV_/.test(base) ||
+    ["CODE_PHRASE", "TERMINOLOGY_CODE", "PARTY_PROXY", "PARTY_SELF", "PARTY_IDENTIFIED", "PARTY_RELATED",
+      "PARTY_REF", "OBJECT_REF", "LOCATABLE_REF", "ISM_TRANSITION", "INSTRUCTION_DETAILS", "EVENT_CONTEXT",
+      "PARTICIPATION", "AUDIT_DETAILS", "FEEDER_AUDIT", "FEEDER_AUDIT_DETAILS", "LINK", "STRING", "INTEGER",
+      "REAL", "BOOLEAN", "DATE", "TIME", "DATE_TIME", "DURATION", "URI"].includes(base));
+}
+
 /**
  * Build a collision-free ADL2 → ADL 1.4 code map for one archetype
- * (https://github.com/ErikSundvall/ehrtslib/issues/127).
+ * (#127, #252).
  *
  * ADL2 id-coded archetypes keep node ids (`idN`) and value codes (`atN`) in
- * separate spaces; ADL 1.4 / at-coded ADL2 have one at-code space (AOM 1.4:
- * one term list per language). Rule, aligned with the parallel at-/id-coded
- * examples in the ADL2 spec (master09.09: `DV_CODED_TEXT[id4]` ↔ `[at9000]`,
- * value `at4` ↔ `at0003`):
+ * separate spaces; ADL 1.4 and at-coded ADL2 have one at-code space. Node
+ * ids are what RM data (`archetype_node_id`) and AQL paths carry, so they
+ * never move:
  *
- * 1. Value codes always get the shifted code ({@link idToAtCode}) — they are
- *    persisted in data (`DV_CODED_TEXT.defining_code`).
- * 2. A node id whose shifted code equals a value code's shifted code shares
- *    it when both have identical terms in every language (they came from one
- *    ADL 1.4 code, as Archie's 1.4 → 2 converter produces); otherwise the
- *    node gets the next unused `at9000+` code at the same specialisation level
- *    (`at0.9000+` in a specialised archetype) and a warning is emitted.
- *    Exception: root node codes (`id1{.1}*` → `at0000{.1}*`, AOM2 VARCN) never
- *    move; a value code that would take the root code is renumbered instead.
- * 3. Synthetic node ids (`id9000+` without any term, created by 1.4 → 2
- *    converters for nodes that had no id in 1.4) are dropped
- *    ({@link DROPPED_NODE_ID}) instead of becoming `at8999`….
+ * 1. A LOCATABLE node id always maps to {@link idToAtCode} (`id19` →
+ *    `at0018`); the root is `at0000{.1}*`.
+ * 2. A node id of a non-LOCATABLE type (DV_*, CODE_PHRASE, …) is dropped
+ *    ({@link DROPPED_NODE_ID}): it had no node id in ADL 1.4. So is a
+ *    synthetic node id (`id9000+` with no term). A node id with no term
+ *    below 9000 is not synthetic (ITEM_TREE and HISTORY often have none).
+ * 3. A value code maps to {@link idToAtCode} too. If that collides with a
+ *    LOCATABLE node id:
+ *    - same terms in every language: both share the code (one ADL 1.4 code);
+ *    - an external binding: the external code is written back
+ *      (`openehr::128`), as in the ADL 1.4 original. A value code the ADL
+ *      Workbench post-parse processor added for an external code is
+ *      written back even without a collision;
+ *    - otherwise (natively authored content only) the value code moves to
+ *      the next free `at9000+` at the same specialisation level and a
+ *      warning is emitted.
  */
 export function buildAdl14CodeMap(
   codes: Iterable<string>,
@@ -75,8 +132,10 @@ export function buildAdl14CodeMap(
   const normalise = opts.normalise ?? ((c: string) => c);
   const terms = opts.terms ?? {};
   const langs = Object.keys(terms);
+  const termOf = (code: string) =>
+    langs.map((l) => terms[l]?.[code] ?? terms[l]?.[normalise(code)]);
   const termKey = (code: string): string | undefined => {
-    const parts = langs.map((l) => terms[l]?.[code]);
+    const parts = termOf(code);
     if (parts.every((p) => p === undefined)) return undefined;
     return JSON.stringify(parts.map((p) => p ? { text: p.text, description: p.description } : null));
   };
@@ -92,9 +151,8 @@ export function buildAdl14CodeMap(
 
   const map = new Map<string, string>();
   const used = new Set<string>();
-  // Next unused code ≥ 9000 at the same specialisation level as `t`
-  // (`at0003` → `at9000`; `at0.3` → `at0.9000`), so specialised archetypes
-  // keep valid code depth.
+  // Next unused code >= 9000 at the same specialisation level as `t`
+  // (`at0003` → `at9000`; `at0.3` → `at0.9000`).
   const nextFree = (t: string) => {
     const segs = t.replace(/^at/i, "").split(".");
     const prefix = segs.length > 1 ? segs.slice(0, -1).join(".") + "." : "";
@@ -106,57 +164,62 @@ export function buildAdl14CodeMap(
       }
     }
   };
-  // Root node codes (id1, id1.1, …) must stay at0000{.1}* (AOM2 VARCN).
-  const isRoot = (c: string) => /^id1(\.1)*$/i.test(normalise(c));
-  const rootTargets = new Set(ids.filter(isRoot).map((c) => idToAtCode(normalise(c))));
-  const nodeShift = new Map<string, string>();
-  for (const c of ids) nodeShift.set(c, idToAtCode(normalise(c)));
-  const isSynthetic = (c: string) => {
-    const n = normalise(c);
-    return +(/^id(\d+)/i.exec(n)?.[1] ?? 0) >= 9000 &&
-      termKey(c) === undefined && termKey(n) === undefined;
-  };
-  for (const [c, t] of nodeShift) if (!isSynthetic(c)) used.add(t);
-  for (const c of ats) used.add(idToAtCode(normalise(c)));
-  const valueSource = new Map<string, string>(); // 1.4 target → ADL2 value code
-  const rootMoved = new Map<string, string>();
-  for (const c of ats) {
-    let t = idToAtCode(normalise(c));
-    if (rootTargets.has(t)) {
-      // Only case where a value code moves: it would take the root code.
-      const key = normalise(c);
-      t = rootMoved.get(key) ?? nextFree(t);
-      if (!rootMoved.has(key)) {
-        rootMoved.set(key, t);
-        opts.warn?.(`value code ${c} would collide with the root node code; renumbered to ${t}`);
-      }
-    }
-    map.set(c, t);
-    if (!valueSource.has(t)) valueSource.set(t, c);
-  }
-
+  const isSynthetic = (c: string) =>
+    +(/^id(\d+)/i.exec(normalise(c))?.[1] ?? 0) >= 9000 && termKey(c) === undefined;
+  const nodeTarget = new Map<string, string>(); // at-code → node id holding it
   for (const c of ids) {
-    const n = normalise(c);
-    if (isSynthetic(c)) {
+    if (isSynthetic(c) || !isLocatableType(opts.nodeTypes?.get(c) ?? opts.nodeTypes?.get(normalise(c)))) {
       map.set(c, DROPPED_NODE_ID);
       continue;
     }
-    const t = nodeShift.get(c)!;
-    const v = valueSource.get(t);
-    if (v === undefined || isRoot(c)) {
+    const t = idToAtCode(normalise(c));
+    map.set(c, t);
+    used.add(t);
+    if (!nodeTarget.has(t)) nodeTarget.set(t, c);
+  }
+  for (const c of ats) used.add(idToAtCode(normalise(c)));
+
+  const bindingOf = (c: string): string | undefined => {
+    for (const [terminology, bag] of Object.entries(opts.bindings ?? {})) {
+      const raw = bag?.[c] ?? bag?.[normalise(c)];
+      if (!raw) continue;
+      const b = parseTermBinding(terminology, String(raw)).binding;
+      if (b) return `${b.terminology}::${b.code}`;
+    }
+    return undefined;
+  };
+  const external = opts.externalCodes ?? true;
+  const moved = new Map<string, string>();
+  for (const c of ats) {
+    const t = idToAtCode(normalise(c));
+    const node = nodeTarget.get(t);
+    const postParse = termOf(c).some((p) => POST_PARSE_TERM.test(String(p?.text ?? "")));
+    const bound = external ? bindingOf(c) : undefined;
+    if (bound && (postParse || node !== undefined)) {
+      map.set(c, bound);
+      if (!postParse) {
+        opts.warn?.(`value code ${c} → ${t} would collide with node id ${node} → ${t}; written back as its bound code ${bound}`);
+      }
+      continue;
+    }
+    if (node === undefined) {
       map.set(c, t);
       continue;
     }
-    const nk = termKey(c) ?? termKey(n);
-    if (nk !== undefined && nk === (termKey(v) ?? termKey(normalise(v)))) {
-      map.set(c, t); // same ADL 1.4 code, used as node and value
+    const vk = termKey(c);
+    if (vk !== undefined && vk === termKey(node)) {
+      map.set(c, t); // one ADL 1.4 code, used as node and value
       continue;
     }
-    const r = nextFree(t);
+    const key = normalise(c);
+    const r = moved.get(key) ?? nextFree(t);
+    if (!moved.has(key)) {
+      moved.set(key, r);
+      opts.warn?.(
+        `value code ${c} → ${t} would collide with node id ${node} → ${t}; value code renumbered to ${r}`,
+      );
+    }
     map.set(c, r);
-    opts.warn?.(
-      `node id ${c} → ${t} would collide with value code ${v} → ${t}; node renumbered to ${r}`,
-    );
   }
   return map;
 }
@@ -180,8 +243,27 @@ export function rewriteAdl2CodesInTextWithMap(
     if (/^at0\d{3}/i.test(c)) continue; // already ADL 1.4
     codes.add(c);
   }
-  const map = buildAdl14CodeMap(codes, options);
-  let out = adl.replace(ADL_CODE_TOKEN, (c) => map.get(c) ?? c);
+  const nodeTypes = new Map<string, string>(options.nodeTypes ?? []);
+  for (const m of adl.matchAll(/\b([A-Z][A-Z0-9_]*(?:<[A-Z0-9_,<> ]+>)?)\[(id\d+(?:\.\d+)*)[\],]/g)) {
+    if (!nodeTypes.has(m[2])) nodeTypes.set(m[2], m[1]);
+  }
+  const map = buildAdl14CodeMap(codes, { ...options, nodeTypes });
+  let out = adl;
+  for (const [code, target] of map) {
+    const ext = externalCodeOf(target);
+    if (!ext) continue;
+    // A value code written back to its external code: the constraint names
+    // the external code, and the code has no local term (#252).
+    const c = code.replace(/\./g, "\\.");
+    out = out.replace(new RegExp(`\\[(?:local::)?${c}\\]`, "g"), `[${ext.terminology}::${ext.code}]`);
+    out = out.replace(new RegExp(`^([ \\t]*)\\["${c}"\\]\\s*=\\s*<[^\\n]*>[ \\t]*\\n`, "gm"), "");
+    out = out.replace(new RegExp(`^([ \\t]*)\\["${c}"\\]\\s*=\\s*<[ \\t]*\\n[\\s\\S]*?^\\1>[ \\t]*\\n`, "gm"), "");
+  }
+  // Anything else that names such a code keeps the plain shift.
+  out = out.replace(ADL_CODE_TOKEN, (c) => {
+    const m = map.get(c);
+    return m === undefined ? c : externalCodeOf(m) ? idToAtCode(c) : m;
+  });
   // Dropped node ids: `DV_TEXT[]` → `DV_TEXT`, `/value[]` → `/value`.
   out = out.replace(/(?<=[\w>])\[\]/g, "");
   return { adl: out, map };

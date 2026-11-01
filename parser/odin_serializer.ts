@@ -19,6 +19,8 @@ function codeStringOf(
   lang: openehr_base.Terminology_code | undefined,
 ): string | undefined {
   if (!lang) return undefined;
+  // OPT 1.4 parsing stores the language as a plain code string.
+  if (typeof lang === "string") return lang || undefined;
   // Getters return plain strings (not String wrappers).
   const code = lang.code_string;
   return typeof code === "string" && code ? code : undefined;
@@ -28,6 +30,7 @@ function terminologyIdOf(
   lang: openehr_base.Terminology_code | undefined,
 ): string | undefined {
   if (!lang) return undefined;
+  if (typeof lang === "string") return "ISO_639-1";
   const id = lang.terminology_id;
   return typeof id === "string" && id ? id : undefined;
 }
@@ -161,11 +164,12 @@ export function serializeLanguageSection(
 export function serializeDescriptionSection(
   desc: openehr_base.RESOURCE_DESCRIPTION | undefined,
   indent: string,
+  extraOtherDetails?: Record<string, string>,
 ): string {
-  if (!desc) {
+  if (!desc && !extraOtherDetails) {
     return "";
   }
-  const bag = desc as Record<string, OdinValue>;
+  const bag = (desc ?? {}) as Record<string, OdinValue>;
   let out = "description\n";
   if (bag.original_author !== undefined) {
     out += `    original_author = ${serializeOdinValue(bag.original_author, indent, 2)}\n`;
@@ -173,9 +177,15 @@ export function serializeDescriptionSection(
   if (bag.details !== undefined) {
     out += `    details = ${serializeOdinValue(bag.details, indent, 2)}\n`;
   }
-  const lifeCode = codeStringOf(desc.lifecycle_state);
+  const otherDetails = extraOtherDetails
+    ? { ...(bag.other_details as Record<string, OdinValue> | undefined), ...extraOtherDetails }
+    : bag.other_details;
+  if (otherDetails !== undefined) {
+    out += `    other_details = ${serializeOdinValue(otherDetails, indent, 2)}\n`;
+  }
+  const lifeCode = codeStringOf(desc?.lifecycle_state);
   if (lifeCode) {
-    const lifeTid = terminologyIdOf(desc.lifecycle_state);
+    const lifeTid = terminologyIdOf(desc?.lifecycle_state);
     const life = lifeTid && !looksLikeTerminologyCode(lifeCode)
       ? `[${lifeTid}::${lifeCode}]`
       : looksLikeTerminologyCode(lifeCode)

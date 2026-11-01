@@ -27,6 +27,7 @@
  */
 
 import { TypeRegistry } from "../common/type_registry.ts";
+import type { FlatRmDefaultIssue } from "./flat_rm_defaults.ts";
 import {
   attributesFor,
   hasRmType,
@@ -328,6 +329,21 @@ const FORMS: Record<string, FlatForm> = {
       f("meaning", ["meaning", "value"], "string", { intermediates: { meaning: "DV_TEXT" } }),
       f("target", ["target", "value"], "string", { intermediates: { target: "DV_EHR_URI" } }),
     ],
+    // A coded meaning: `|meaning|code`, `|meaning|terminology`, `|meaning|value`
+    // (spec "RM Attributes prefix" LINK example).
+    encodeExtra: (obj, fields) => {
+      const meaning = rmProp(obj, "meaning");
+      const code = rmProp(meaning, "defining_code");
+      if (code == null) return;
+      const codeString = rmProp(code, "code_string");
+      const terminology = rmProp(rmProp(code, "terminology_id"), "value");
+      if (codeString == null) return;
+      delete fields.meaning;
+      fields["meaning|code"] = String(codeString);
+      if (terminology != null) fields["meaning|terminology"] = String(terminology);
+      const value = rmProp(meaning, "value");
+      if (value != null) fields["meaning|value"] = String(value);
+    },
   },
   OBJECT_REF: { fields: OBJECT_REF_FIELDS, complete: (o) => fixObjectIdType(o) },
   PARTY_REF: { fields: OBJECT_REF_FIELDS, complete: (o) => fixObjectIdType(o) },
@@ -938,19 +954,34 @@ export function decodeRmObjectInto(
   if (form.dvMap) {
     const usable = Object.keys(fields).some((k) => k !== "_type");
     if (usable) {
-      const built = buildDvValue(base, fields);
+      const dropped: FlatRmDefaultIssue[] = [];
+      const built = buildDvValue(base, fields, { issues: dropped, path: "" });
+      for (const i of dropped) if (i.kind === "unknown-key") unknown?.push(`${path}${i.path}`);
       const keepType = obj._type;
       Object.assign(obj, built);
       if (fields._type == null && keepType) obj._type = base.startsWith("PARTY_") ? built._type : keepType;
     }
   } else {
+    const consumed = new Set<string>(["_type"]);
     for (const field of form.fields) {
+      consumed.add(field.suffix);
+      for (const alias of field.aliases ?? []) consumed.add(alias);
       let v: unknown = fields[field.suffix];
       for (const alias of field.aliases ?? []) v ??= fields[alias];
-      if (v == null && field.suffix === "") v = fields.value;
+      if (v == null && field.suffix === "") {
+        v = fields.value;
+        consumed.add("value");
+      }
       const c = coerce(v, field.kind);
       if (c === undefined) continue;
       setPath(obj, field.path, c, field.intermediates);
+    }
+    // A field the form does not read sets nothing: report it (a form with
+    // its own decodeExtra reads further fields itself).
+    if (!form.decodeExtra) {
+      for (const [k, v] of Object.entries(fields)) {
+        if (v != null && !consumed.has(k)) unknown?.push(`${path}|${k}`);
+      }
     }
   }
   form.decodeExtra?.(fields, obj);

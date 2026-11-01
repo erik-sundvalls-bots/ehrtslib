@@ -296,10 +296,10 @@ function walkTermScopes(
   }
 }
 
-/** True for archetype at-codes (at0001), not template slot ids (at0.2). */
+/** Archetype node or value code, in either ADL2 coding system (not a template slot id). */
 function isArchetypeLocalCode(code: string): boolean {
-  if (/^at0\.\d/i.test(code)) return false;
-  return /^at\d/i.test(code);
+  if (/^(?:at|id)0\.\d/i.test(code)) return false;
+  return /^(?:at|id)\d/i.test(code);
 }
 
 function isSpecialisedAtCode(code: string): boolean {

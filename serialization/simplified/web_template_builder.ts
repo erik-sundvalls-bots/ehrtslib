@@ -3,12 +3,19 @@
  */
 
 import * as openehr_am from "../../am/openehr_am.ts";
+import { adl14CodeFor } from "../../generation/adl14_code_map_cache.ts";
+import { externalCodeOf } from "../../generation/id_to_at_code.ts";
 import type {
   QuantityItemInterval,
   QuantityItemRuntime,
 } from "../../parser/legacy/xml_aom_mapper.ts";
 import * as openehr_base from "../../base/openehr_base.ts";
 import { isDataValueType as metaIsDataValueType } from "../../meta/mod.ts";
+import {
+  adl2CodingSystemOf,
+  isSyntheticNodeId,
+  markSyntheticNodeId,
+} from "../../parser/legacy/adl2_coding_system.ts";
 import type {
   CollapsedRmObject,
   WebTemplate,
@@ -68,6 +75,7 @@ function complexShellFromSlot(
   if (src[TERM_NAME_FALLBACK_NODE_ID_KEY]) {
     dest[TERM_NAME_FALLBACK_NODE_ID_KEY] = src[TERM_NAME_FALLBACK_NODE_ID_KEY];
   }
+  if (isSyntheticNodeId(slot)) markSyntheticNodeId(obj);
   return obj;
 }
 
@@ -452,10 +460,24 @@ function applyTerminologyInputs(
   if (terminology) codeInput.terminology = terminology;
 }
 
+/**
+ * Archetype term bag for a node's scope. When it exists, a code missing from
+ * it must not be read from the flat template terms: base at-codes collide
+ * across archetypes (for example a node id minted on up-conversion).
+ */
+function scopedBagFor(
+  archetype: Record<string, TermBag>,
+  scope: string | undefined,
+): TermBag | undefined {
+  return scope ? archetype[scope] : undefined;
+}
+
 function isDataValueType(rmType: string): boolean {
   // Web Template also treats AM constraint types (C_*) as "value-like" leaves.
-  return metaIsDataValueType(rmType) || rmType === "CODE_PHRASE" ||
-    rmType.startsWith("C_");
+  // Generic names (`DV_INTERVAL<DV_COUNT>`) count by their base type.
+  const base = rmType.split("<")[0].trim();
+  return metaIsDataValueType(base) || base === "CODE_PHRASE" ||
+    base.startsWith("C_");
 }
 
 /**
@@ -465,6 +487,12 @@ function isDataValueType(rmType: string): boolean {
 function constraintNodeId(obj: openehr_am.C_OBJECT): string | undefined {
   const ref = (obj as openehr_am.C_ARCHETYPE_ROOT).archetype_ref;
   if (obj instanceof openehr_am.C_ARCHETYPE_ROOT && ref) return ref;
+  // Data values are not LOCATABLE: no node id in RM data or AQL paths (ADL2
+  // still gives their constraints one). Node ids minted on OPT 1.4
+  // up-conversion are not in the OPT 1.4 a CDR holds.
+  if (isDataValueType(obj.rm_type_name ?? "") || isSyntheticNodeId(obj)) {
+    return undefined;
+  }
   return nodeIdToAtCode(obj.node_id) || undefined;
 }
 
@@ -498,6 +526,11 @@ export function fixedNameConstraint(
  * sibling shares the node id and the child has a fixed name constraint
  * (repeated, renamed archetype occurrences).
  */
+/** `attr[nodeId]`, or `attr` when the node has no node id in paths. */
+function pathSegment(attrName: string, nodeId: string | undefined): string {
+  return nodeId ? `${attrName}[${nodeId}]` : attrName;
+}
+
 function childPathPredicate(
   child: openehr_am.C_OBJECT,
   siblings: openehr_am.C_OBJECT[],
@@ -561,6 +594,8 @@ export class WebTemplateBuilder {
   private applyL10n: boolean;
   private templateTerms: Record<string, TermBag> = {};
   private archetypeTerms: Record<string, TermDefinitionTable> = {};
+  /** The template being built, when it is id-coded (value codes are mapped). */
+  private opt?: openehr_am.OPERATIONAL_TEMPLATE;
   /** Primary language first, then the additional languages the caller included. */
   private selectedLanguages: string[] = [];
   private idLanguage: WebTemplateIdLanguage = "primary";
@@ -611,7 +646,9 @@ export class WebTemplateBuilder {
       bags.template,
       bags.archetype,
       meta[TERM_ARCHETYPE_SCOPE_KEY],
-    ) ?? lookupTerm(bags.template, obj.node_id);
+    ) ?? (scopedBagFor(bags.archetype, meta[TERM_ARCHETYPE_SCOPE_KEY])
+      ? undefined
+      : lookupTerm(bags.template, obj.node_id));
   }
 
   /** Term in one language. The original language also applies a fixed name. */
@@ -782,8 +819,36 @@ export class WebTemplateBuilder {
         scope,
       );
     }
+    this.mapLocalValueCodes(
+      inputs,
+      (term as TermScopeMeta | undefined)?.[TERM_ARCHETYPE_SCOPE_KEY] ??
+        (cObj as TermScopeMeta | undefined)?.[TERM_ARCHETYPE_SCOPE_KEY],
+    );
 
     return inputs;
+  }
+
+  /**
+   * id-coded templates: local value codes become their ADL 1.4 codes, by the
+   * same per-archetype map as the OPT 1.4 export and RM data (#252). A
+   * value code written back to an external code changes the terminology.
+   */
+  private mapLocalValueCodes(inputs: WebTemplateInput[], scope: string | undefined): void {
+    if (!this.opt) return;
+    for (const input of inputs) {
+      if (input.terminology && input.terminology !== "local") continue;
+      if (!input.list?.length && typeof input.defaultValue !== "string") continue;
+      let external: string | undefined;
+      const map = (code: string) => {
+        const m = adl14CodeFor(this.opt, code, scope);
+        const ext = externalCodeOf(m);
+        if (ext) external = ext.terminology;
+        return ext?.code ?? m;
+      };
+      if (input.list) input.list = input.list.map((item) => ({ ...item, value: map(item.value) }));
+      if (typeof input.defaultValue === "string") input.defaultValue = map(input.defaultValue);
+      if (external && input.terminology) input.terminology = external;
+    }
   }
 
   /** Attach OPT path annotations and promote L10n.* into localizedNames. */
@@ -829,6 +894,7 @@ export class WebTemplateBuilder {
       TermBag
     >;
     this.archetypeTerms = scoped.archetype_term_definitions ?? {};
+    this.opt = adl2CodingSystemOf(opt) === "id-coded" ? opt : undefined;
     this.bagCache.clear();
     this.pathAnnotations = this.applyL10n ? flattenOptPathAnnotations(opt) : {};
 
@@ -1336,7 +1402,7 @@ export class WebTemplateBuilder {
       if (!(ev instanceof openehr_am.C_COMPLEX_OBJECT)) continue;
       const evPath = joinAqlPath(
         aqlPath,
-        `events[${nodeIdToAtCode(ev.node_id)}]`,
+        pathSegment("events", constraintNodeId(ev)),
       );
       const { min, max } = multiplicityBounds(ev.occurrences);
       const eventShell: WebTemplateNode = this.decorateWithAnnotations({
@@ -1358,7 +1424,7 @@ export class WebTemplateBuilder {
         if (!(child instanceof openehr_am.C_COMPLEX_OBJECT)) continue;
         const flattened = this.flattenDataStructure(
           child,
-          joinAqlPath(evPath, `${attrName}[${nodeIdToAtCode(child.node_id)}]`),
+          joinAqlPath(evPath, pathSegment(attrName, constraintNodeId(child))),
           eventShell,
         );
         eventChildren.push(...flattened.children ?? []);
@@ -1418,13 +1484,16 @@ export class WebTemplateBuilder {
       ?.children?.[0];
     if (valueChild) {
       const leaf = this.buildLeaf(valueChild, aqlPath, shell.id);
-      // The value constraint usually has no node id of its own; keep the
-      // ELEMENT's at-code so instances can be matched/rebuilt correctly.
-      const elementNodeId = nodeIdToAtCode(obj.node_id);
+      // Data values are not LOCATABLE and have no node id in the Web
+      // Template; keep the ELEMENT's at-code so instances can be
+      // matched/rebuilt correctly.
+      const elementNodeId = constraintNodeId(obj);
       if (!leaf.nodeId && elementNodeId) {
         leaf.nodeId = elementNodeId;
         const fields = this.termFields(obj, shell.id);
-        if (fields.localizedName && !leaf.localizedName) {
+        // An ADL2 value constraint has a node id but no term of its own: a
+        // term found for it belongs to another node, so the ELEMENT's wins.
+        if (fields.localizedName && (!leaf.localizedName || valueChild.node_id)) {
           leaf.name = fields.name;
           leaf.localizedName = fields.localizedName;
           leaf.id = fields.id;
@@ -1445,7 +1514,11 @@ export class WebTemplateBuilder {
     idHint: string,
   ): WebTemplateNode {
     const rmType = obj.rm_type_name ?? "DV_TEXT";
-    const { min, max } = multiplicityBounds(obj.occurrences);
+    // ADL2 primitive constraints carry no occurrences; like the OPT 1.4
+    // C_CODE_PHRASE / C_PRIMITIVE_OBJECT they stand for exactly one value.
+    const { min, max } = !obj.occurrences && obj instanceof openehr_am.C_PRIMITIVE_OBJECT
+      ? { min: 1, max: 1 }
+      : multiplicityBounds(obj.occurrences);
     return this.decorateWithAnnotations({
       ...this.termFields(obj, idHint),
       rmType,
@@ -1525,7 +1598,7 @@ export class WebTemplateBuilder {
       const name = attr.rm_attribute_name;
       const child = (attr as { children?: openehr_am.C_OBJECT[] }).children?.[0];
       if (name === "other_context" && child instanceof openehr_am.C_COMPLEX_OBJECT) {
-        const id = nodeIdToAtCode(child.node_id);
+        const id = constraintNodeId(child);
         const path = joinAqlPath("/context", id ? `other_context[${id}]` : "other_context");
         content.push(...this.flattenDataStructure(child, path, node).children ?? []);
       } else if (name === "setting" && child) {

@@ -215,25 +215,25 @@ Deno.test("JCS — golden template hashes (at-coded default; id-coded alternate)
     await import("../../../contribution_builder/mod.ts");
   const atCoded: Record<string, { content: string; binding: string }> = {
     "ehrbase_blood_pressure_simple.de.v0.opt": {
-      content: "ab3d39d68b5e6c7788b702ece522ad76442a7005904f1a5b734c618f1ec99fff",
-      binding: "7a6b5c494fa25b30b9ffe1bfff39f336295e08209b3128cabeaba6b4df9baffa",
+      content: "84c04223456193e392008bad624f4266d53836d202fc1d87a702de878055c616",
+      binding: "ba9572bd8464f035694ff1d9ab32e79982a3cb6ce02608c4bc234918d8b6aed4",
     },
     "Test_all_types.opt": {
-      content: "aad623e83a1c1de477613003ba8311927d8993040b02201f73062deb1136b62f",
-      binding: "08f905f075a1e75c0a3eb350a8624fb7b56a58a9c50c89490b1090e4acc13fe6",
+      content: "acdbff1550beebf0d9eab3983e5ec81c6da960d982e4584841db11120938ffff",
+      binding: "dd70ad78269164bcee95e4fadd6869a51874292a99539aaacfd46a2f12b24eb1",
     },
     "multilingual_en_sv_de.opt": {
-      content: "3c6ba83c113f612543aa78b40e278b7fe3235e499195a45a023cc658afb1eb0d",
-      binding: "a47ab592d2a4bec88097368ce45b9c97809f9bb07a290c5832c5ecbfa872d827",
+      content: "674b6c349c30c03c5f5bfd261f1de6a02c6130640d5fd5f7c71ad21c99abcfc9",
+      binding: "c5afb608b10869c268ebcf51a9e657cef306d3eea2b9415c31758a0f3244b738",
     },
   };
   const idCodedBinding: Record<string, string> = {
     "ehrbase_blood_pressure_simple.de.v0.opt":
-      "b8b03dbdbe65e3985c83f25878346d0c87c202a830914fc2fcd62a8edef319cf",
+      "d87bfd47d0a6f21589675564be427c652a41d03ecd6567cfa2e9e8ab8d5227d5",
     "Test_all_types.opt":
-      "b61ea1ba3baf79abaccdf3fe5f650c4caa909cfb58823ba5765ae94c9d1d1759",
+      "7294a8e58a33641e4e17699d7042818c98cda47006c6422a81db7bdb512a292d",
     "multilingual_en_sv_de.opt":
-      "3c6b6332d1e2e94b97337cf9291c461a00bd346f4071cc7f4b5e28d96057e56a",
+      "00adf6744dff3b4df5f8eb9e5bfba43fb1e594269d297b712d3010157f5206d1",
   };
   for (const [name, { content: contentHex, binding: bindingHex }] of Object
     .entries(atCoded)) {

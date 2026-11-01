@@ -5,7 +5,10 @@
  * Spec evidence: ADL2 master09.09-spec_terminology.adoc gives the same
  * archetype in both coding systems — id-coded `DV_CODED_TEXT[id4]` and value
  * `at4` (l.103, l.124) correspond to at-coded `DV_CODED_TEXT[at9000]` and
- * `at0003` (l.31, l.52). Value codes keep the shifted code; the node moves.
+ * `at0003` (l.31, l.52). ADL 1.4 has no node id on DV_* nodes, so the
+ * DV_CODED_TEXT node id is dropped and the value codes keep the shifted code.
+ * Where a LOCATABLE node id and a value code collide, the node keeps its code
+ * (it is in data and paths) and the value code moves (#252).
  */
 import { assert, assertEquals } from "https://deno.land/std@0.220.0/assert/mod.ts";
 import { parseAdl } from "../../../parser/mod.ts";
@@ -24,7 +27,7 @@ const SPEC = new URL(
 const atCodes = (s: string) =>
   [...s.matchAll(/\[(at[0-9.]+)\]/g)].map((m) => m[1]);
 
-Deno.test("#127 spec 9.9 example: value codes keep shift, colliding node → at9000", () => {
+Deno.test("#127/#252 spec 9.9 example: value codes keep shift, DV_CODED_TEXT node id dropped", () => {
   // deno-lint-ignore no-explicit-any
   const r: any = parseAdl(Deno.readTextFileSync(SPEC));
   const ser = new ADL14Serializer();
@@ -32,11 +35,10 @@ Deno.test("#127 spec 9.9 example: value codes keep shift, colliding node → at9
   assert(adl.includes("EVALUATION[at0000]"), adl);
   assert(adl.includes("ITEM_TREE[at0001]"), adl);
   assert(adl.includes("ELEMENT[at0002]"), adl);
-  assert(adl.includes("DV_CODED_TEXT[at9000]"), adl); // as in the at-coded spec example
+  assert(/DV_CODED_TEXT matches/.test(adl) && !adl.includes("DV_CODED_TEXT["), adl);
   assert(/\[local::at0003, at0004, at0005, at0006, at0009, at0012, at0013, at0010, at0011, at0007, at0008\]/.test(adl), adl);
   assert(adl.includes('["at0003"]') && adl.includes("No significant illness"), adl);
-  assertEquals(ser.warnings.length, 1, ser.warnings.join("\n"));
-  assert(ser.warnings[0].includes("id4") && ser.warnings[0].includes("at9000"));
+  assertEquals(ser.warnings, []);
 });
 
 Deno.test("#127 node and value from the same 1.4 code (identical terms) share it", () => {
@@ -52,14 +54,14 @@ Deno.test("#127 node and value from the same 1.4 code (identical terms) share it
   assertEquals(warns, []);
 });
 
-Deno.test("#127 different terms: value keeps code, node renumbered with warning", () => {
+Deno.test("#252 different terms: node keeps code, value renumbered with warning", () => {
   const warns: string[] = [];
   const map = buildAdl14CodeMap(["id1", "id2", "at2"], {
     terms: { en: { id2: { text: "Node" }, at2: { text: "Value" } } },
     warn: (m) => warns.push(m),
   });
-  assertEquals(map.get("at2"), "at0001");
-  assertEquals(map.get("id2"), "at9000");
+  assertEquals(map.get("id2"), "at0001");
+  assertEquals(map.get("at2"), "at9000");
   assertEquals(warns.length, 1);
 });
 
@@ -109,12 +111,13 @@ Deno.test("#127 CKM organisation: 1.4 → Archie ADL2 → Ehrtslib 1.4 keeps CKM
   assertEquals([...new Set(atCodes(out))].sort(), [...new Set(atCodes(ckm))].sort());
 });
 
-Deno.test("#127 specialised archetype: colliding new node moves to at0.9000+", () => {
+Deno.test("#252 specialised archetype: colliding new value code moves to at0.9000+", () => {
   const map = buildAdl14CodeMap(["id1.1", "id0.3", "id0.10", "at0.3", "at0.10"], {
     terms: { en: { "id0.3": { text: "N3" }, "at0.3": { text: "V3" }, "id0.10": { text: "N10" }, "at0.10": { text: "V10" } } },
   });
-  assertEquals(map.get("at0.3"), "at0.3");
-  assertEquals(map.get("id0.3"), "at0.9000");
-  assertEquals(map.get("id0.10"), "at0.9001"); // segment-wise numeric order: 0.3 < 0.10
+  assertEquals(map.get("id0.3"), "at0.3");
+  assertEquals(map.get("at0.3"), "at0.9000");
+  assertEquals(map.get("at0.10"), "at0.9001"); // segment-wise numeric order: 0.3 < 0.10
+  assertEquals(map.get("id0.10"), "at0.10");
   assertEquals(map.get("id1.1"), "at0000.1");
 });

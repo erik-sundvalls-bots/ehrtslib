@@ -9,6 +9,7 @@
  */
 
 import type { WebTemplateNode } from "./types.ts";
+import { attributesFor, hasRmType } from "../../meta/rm_attributes.ts";
 import {
   type CodedTextDisplayValue,
   type CodedTextMismatch,
@@ -47,6 +48,12 @@ export interface DvValueBuildContext {
   issues?: FlatRmDefaultIssue[];
   /** Path attached to reported issues. */
   path?: string;
+  /**
+   * Severity of a field the type has no FLAT form for (it would set
+   * nothing): `"error"` (default), `"warning"` or `"ignore"`. Reported only
+   * when {@link issues} is given.
+   */
+  unknownKeys?: "error" | "warning" | "ignore";
   /**
    * `|code`, `|value`, or bare key without an exact template match:
    * `"reject"` (default), `"keep"`, or `"correct"`. See `CodedTextMismatch`.
@@ -356,6 +363,20 @@ export function getFieldMap(rmType: string): DvFieldMap | undefined {
 }
 
 /** Fallback map for unknown types: single bare `value` field. */
+const PRIMITIVE_VALUE = /^(String|Integer|Integer64|Real|Double|Boolean|Character|Octet|Iso8601_\w+|URI)$/;
+
+/**
+ * {@link fallbackFieldMap} for a type whose `value` is a primitive (or an
+ * unknown type); no fields for a known type without one (DV_STATE,
+ * DV_PARAGRAPH, DV_SCALE), so a bare key is reported instead of building
+ * an invalid `value`.
+ */
+function fallbackFor(rmType: string): DvFieldMap {
+  if (!hasRmType(rmType)) return fallbackFieldMap(rmType);
+  const value = attributesFor(rmType).find((a) => a.name === "value");
+  return value && PRIMITIVE_VALUE.test(value.typeName) ? fallbackFieldMap(rmType) : { rmType, fields: [] };
+}
+
 export function fallbackFieldMap(rmType: string): DvFieldMap {
   return {
     rmType,
@@ -575,13 +596,23 @@ export function buildDvValue(
       nodeTerminology(codedNode),
     )
     : fields;
-  const map = getFieldMap(resolved) ?? fallbackFieldMap(resolved);
+  const map = getFieldMap(resolved) ?? fallbackFor(resolved);
   const root: RmObject = { _type: resolved };
+  const consumed = new Set<string>(["_type"]);
 
   for (const field of map.fields) {
     let value = source[field.suffix];
+    consumed.add(field.suffix);
     // `|value` is a read alias for the bare suffix
-    if (value == null && field.suffix === "") value = source.value;
+    if (value == null && field.suffix === "") {
+      value = source.value;
+      consumed.add("value");
+    }
+    // DV_IDENTIFIER: the bare key is a read alias for `|id` (as EHRbase reads it)
+    if (value == null && resolved === "DV_IDENTIFIER" && field.suffix === "id") {
+      value = source[""];
+      consumed.add("");
+    }
     if (value == null) continue;
     const coerced = coerce(value, field.kind);
     if (coerced === undefined) continue;
@@ -597,6 +628,22 @@ export function buildDvValue(
       current = next;
     }
     current[field.path[field.path.length - 1]] = coerced;
+  }
+
+  // A key that sets nothing is reported, never dropped silently.
+  const mode = context?.unknownKeys ?? "error";
+  if (context?.issues && mode !== "ignore") {
+    for (const [k, v] of Object.entries(source)) {
+      if (v == null || consumed.has(k)) continue;
+      context.issues.push({
+        path: `${context.path ?? context.node?.aqlPath ?? ""}${k ? `|${k}` : ""}`,
+        severity: mode,
+        kind: "unknown-key",
+        message: k
+          ? `${resolved} has no FLAT field "|${k}"; ignored`
+          : `${resolved} has no bare FLAT value; ignored (use its fields or _<attribute> paths)`,
+      });
+    }
   }
 
   // Apply build defaults (e.g. default terminology) when the owning object

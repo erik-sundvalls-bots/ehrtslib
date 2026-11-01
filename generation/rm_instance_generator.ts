@@ -11,7 +11,7 @@
 
 import * as openehr_am from "../am/openehr_am.ts";
 import { resolveDvCodedTextValue } from "./coded_text_value.ts";
-import { isSubtypeOf } from "../meta/mod.ts";
+import { hasRmAttribute, isSubtypeOf } from "../meta/mod.ts";
 import { resolveTemplateLanguage } from "./term_codes.ts";
 import {
   lookupTermInBag,
@@ -42,6 +42,27 @@ interface Bounds {
   max: number;
   unbounded: boolean;
 }
+
+/** Data value types whose mandatory attributes a template seldom constrains. */
+const FILL_DEFAULTS_TYPES = new Set(["DV_MULTIMEDIA", "DV_PARSABLE", "DV_ORDINAL", "DV_SCALE"]);
+
+/** Primitive RM types and an example value (ISO 8601 for dates and times). */
+const PRIMITIVE_EXAMPLES: Record<string, unknown> = {
+  STRING: undefined,
+  INTEGER: 1,
+  INTEGER64: 1,
+  REAL: 1.0,
+  DOUBLE: 1.0,
+  BOOLEAN: true,
+  DATE: "2026-01-01",
+  TIME: "12:00:00",
+  DATE_TIME: "2026-01-01T12:00:00",
+  DURATION: "PT1H",
+  ISO8601_DATE: "2026-01-01",
+  ISO8601_TIME: "12:00:00",
+  ISO8601_DATE_TIME: "2026-01-01T12:00:00",
+  ISO8601_DURATION: "PT1H",
+};
 
 const MANDATORY_RM_ATTRIBUTES: Record<string, string[]> = {
   LOCATABLE: ["archetype_node_id", "name"],
@@ -183,6 +204,10 @@ export class RMInstanceGenerator {
         // DV_TEXT.value is mandatory; templates constrain only defining_code.
         instance.value = this.codedTextValue(instance.defining_code, ctx);
       }
+      if (FILL_DEFAULTS_TYPES.has(rmType)) {
+        const defaults = this.generateDataValueByType(rmType, pathHint);
+        for (const [k, v] of Object.entries(defaults)) instance[k] ??= v;
+      }
       if (rmType === "DV_TEXT" && instance.value === undefined) {
         const nodeId = cObject.node_id;
         instance.value = (nodeId
@@ -207,6 +232,9 @@ export class RMInstanceGenerator {
     for (const cAttribute of cObject.attributes ?? []) {
       const attrName = cAttribute.rm_attribute_name;
       if (!attrName || this.isAttributeExcluded(cAttribute)) continue;
+      // Templates sometimes constrain attributes the RM type does not have
+      // (`ISM_TRANSITION.name`, `DV_PROPORTION.is_integral`); data cannot carry them.
+      if (!hasRmAttribute(cObject.rm_type_name, attrName)) continue;
 
       const value = this.generateAttributeValue(cAttribute, depth, termContext);
       if (value === undefined) continue;
@@ -600,7 +628,9 @@ export class RMInstanceGenerator {
         ? cObject.constraint
         : undefined) ??
       codes?.[0] ??
-      "at0000";
+      ((cObject as { terminology_id?: string }).terminology_id === "IANA_media-types"
+        ? "text/plain"
+        : "at0000");
     const terminology =
       (cObject as { terminology_id?: string }).terminology_id ??
         (typeof cObject.default_value?.terminology_id === "string"
@@ -617,6 +647,14 @@ export class RMInstanceGenerator {
     cObject: openehr_am.C_PRIMITIVE_OBJECT | openehr_am.C_PRIMITIVE,
     pathHint: string,
   ): any {
+    // OPT XML wraps C_STRING / C_INTEGER / … in C_PRIMITIVE_OBJECT.item.
+    const item = (cObject as { item?: unknown }).item;
+    if (
+      item instanceof openehr_am.C_STRING || item instanceof openehr_am.C_BOOLEAN ||
+      item instanceof openehr_am.C_INTEGER || item instanceof openehr_am.C_REAL
+    ) {
+      return this.generatePrimitive(item, pathHint);
+    }
     if (cObject instanceof openehr_am.C_STRING) {
       const values = (cObject as { list?: string[] }).list;
       return cObject.assumed_value?.value ?? values?.[0] ??
@@ -676,17 +714,34 @@ export class RMInstanceGenerator {
           id: "example-id",
           type: "example",
         };
+      case "DV_MULTIMEDIA":
+        return {
+          _type: "DV_MULTIMEDIA",
+          media_type: this.codePhrase("IANA_media-types", "text/plain"),
+          size: 0,
+          uri: { _type: "DV_URI", value: "https://example.org/media" },
+        };
+      case "DV_PARSABLE":
+        return { _type: "DV_PARSABLE", value: this.exampleText(pathHint), formalism: "text/plain" };
+      case "DV_ORDINAL":
+      case "DV_SCALE":
+        return {
+          _type: rmType,
+          value: 1,
+          symbol: this.dvCodedText("Example", "local", "at0000"),
+        };
       case "CODE_PHRASE":
         return this.codePhrase("local", "at0000");
-      default:
-        if (rmType === "STRING") return this.exampleText(pathHint);
-        if (rmType === "INTEGER") return 1;
-        if (rmType === "REAL") return 1.0;
-        if (rmType === "BOOLEAN") return true;
-        return {
-          _type: rmType || "DV_TEXT",
-          value: this.exampleText(pathHint),
-        };
+      default: {
+        const key = rmType.toUpperCase();
+        if (key in PRIMITIVE_EXAMPLES) {
+          return PRIMITIVE_EXAMPLES[key] ?? this.exampleText(pathHint);
+        }
+        if (rmType.startsWith("DV_") || !rmType) {
+          return { _type: rmType || "DV_TEXT", value: this.exampleText(pathHint) };
+        }
+        return { _type: rmType };
+      }
     }
   }
 

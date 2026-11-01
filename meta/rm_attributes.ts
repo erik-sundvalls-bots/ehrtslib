@@ -96,6 +96,16 @@ export function ownAttributesFor(rmType: string): RmAttributeMeta[] {
  * Own + inherited attributes for `rmType`.
  * Order: declaring type from root → leaf, then attribute name within each type.
  */
+/**
+ * True when `attrName` is an attribute of `rmType` (own or inherited). Unknown
+ * types return true, so callers only drop attributes of known RM types.
+ */
+export function hasRmAttribute(rmType: string | undefined, attrName: string): boolean {
+  if (!rmType || !hasRmType(rmType)) return true;
+  const attrs = attributesFor(rmType);
+  return !attrs.length || attrs.some((a) => a.name === attrName);
+}
+
 export function attributesFor(rmType: string): RmAttributeMeta[] {
   if (!RM_CLASSES[rmType] && !RM_OWN_ATTRIBUTES[rmType]) {
     return [];

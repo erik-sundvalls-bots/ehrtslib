@@ -1,0 +1,832 @@
+operational_template (adl_version=2.4.0; rm_release=1.0.4)
+    ehrbase_blood_pressure_simple.de.v0
+
+language
+    original_language = <[ISO_639-1::en]>
+
+description
+    original_author = <
+            ["Original Author"] = <"Not Specified">
+        >
+    details = <
+            ["en"] = <
+                language = <[ISO_639-1::en]>
+                purpose = <"Not Specified">
+            >
+        >
+    other_details = <
+            ["MetaDataSet:Sample Set"] = <"Template metadata sample set">
+            ["Acknowledgements"] = <"">
+            ["Business Process Level"] = <"">
+            ["Care setting"] = <"">
+            ["Client group"] = <"">
+            ["Clinical Record Element"] = <"">
+            ["Copyright"] = <"">
+            ["Issues"] = <"">
+            ["Owner"] = <"">
+            ["Sign off"] = <"">
+            ["Speciality"] = <"">
+            ["User roles"] = <"">
+        >
+    lifecycle_state = <"Initial">
+
+definition
+    use_archetype COMPOSITION[at0000, openEHR-EHR-COMPOSITION.sample_encounter.v1] occurrences matches {1..1} matches {
+        category existence matches {1..1} matches {
+            DV_CODED_TEXT[at9000] occurrences matches {1..1} matches {
+                defining_code existence matches {1..1} matches {
+                    [openehr::433]
+                }
+            }
+        }
+        context existence matches {0..1} matches {
+            EVENT_CONTEXT[at9001] occurrences matches {1..1} matches {
+                other_context existence matches {0..1} matches {
+                    ITEM_TREE[at0001] occurrences matches {1..1} matches {
+                        items existence matches {0..1} cardinality matches {0..*; unordered} matches {
+                            CLUSTER[at0006] occurrences matches {0..1} matches {
+                                items existence matches {1..1} cardinality matches {0..*; unordered} matches {
+                                    use_archetype CLUSTER[at0000, openEHR-EHR-CLUSTER.sample_device.v1] occurrences matches {0..*} matches {
+                                        items existence matches {1..1} cardinality matches {0..*; unordered} matches {
+                                            ELEMENT[at0001] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_TEXT[at9000] occurrences matches {1..1}
+                                                }
+                                            }
+                                            ELEMENT[at0002] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_TEXT[at9001] occurrences matches {1..1}
+                                                }
+                                            }
+                                            CLUSTER[at0004] occurrences matches {0..1} matches {
+                                                items existence matches {1..1} cardinality matches {0..*; unordered} matches {
+                                                    ELEMENT[at0003] occurrences matches {0..1} matches {
+                                                        value existence matches {0..1} matches {
+                                                            DV_TEXT[at9002] occurrences matches {1..1}
+                                                        }
+                                                    }
+                                                    ELEMENT[at0005] occurrences matches {0..1} matches {
+                                                        value existence matches {0..1} matches {
+                                                            DV_TEXT[at9003] occurrences matches {1..1}
+                                                        }
+                                                    }
+                                                    ELEMENT[at0006] occurrences matches {0..1} matches {
+                                                        value existence matches {0..1} matches {
+                                                            DV_TEXT[at9004] occurrences matches {1..1}
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            CLUSTER[at0007] occurrences matches {0..1} matches {
+                                                items existence matches {1..1} cardinality matches {0..*; unordered} matches {
+                                                    allow_archetype CLUSTER[at9005] occurrences matches {0..*} matches {
+                                                        include
+                                                            archetype_id/value matches {/openEHR-EHR-CLUSTER\.device\.v1/}
+                                                    }
+                                                }
+                                            }
+                                            CLUSTER[at0008] occurrences matches {0..1} matches {
+                                                items existence matches {1..1} cardinality matches {0..*; unordered} matches {
+                                                    ELEMENT[at0009] occurrences matches {0..1} matches {
+                                                        value existence matches {0..1} matches {
+                                                            DV_DATE_TIME[at9006] occurrences matches {1..1}
+                                                        }
+                                                    }
+                                                    ELEMENT[at0010] occurrences matches {0..1} matches {
+                                                        value existence matches {0..1} matches {
+                                                            DV_DATE_TIME[at9007] occurrences matches {1..1}
+                                                        }
+                                                    }
+                                                    ELEMENT[at0011] occurrences matches {0..1} matches {
+                                                        value existence matches {0..1} matches {
+                                                            DV_TEXT[at9008] occurrences matches {1..1}
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        content existence matches {0..1} cardinality matches {0..*; unordered} matches {
+            use_archetype OBSERVATION[at0000, openEHR-EHR-OBSERVATION.sample_blood_pressure.v1] occurrences matches {1..8} matches {
+                data existence matches {1..1} matches {
+                    HISTORY[at0001] occurrences matches {1..1} matches {
+                        events existence matches {0..1} cardinality matches {1..*; unordered} matches {
+                            POINT_EVENT[at0002] occurrences matches {0..1} matches {
+                                offset existence matches {1..1} matches {
+                                    DV_DURATION[at9000] occurrences matches {1..1} matches {
+                                        value existence matches {1..1} matches {
+                                            |PT0S..PT0S|
+                                        }
+                                    }
+                                }
+                                data existence matches {1..1} matches {
+                                    ITEM_LIST[at0003] occurrences matches {1..1} matches {
+                                        items existence matches {0..1} cardinality matches {0..*; ordered} matches {
+                                            ELEMENT[at0004] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_QUANTITY[at9001] occurrences matches {1..1} matches {
+                                                        property matches {[openehr::125]}
+                                                        units matches {"mm[Hg]"}
+                                                        magnitude matches {|0..<1000|}
+                                                        precision matches {|0..0|}
+                                                    }
+                                                }
+                                            }
+                                            ELEMENT[at0005] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_QUANTITY[at9002] occurrences matches {1..1} matches {
+                                                        property matches {[openehr::125]}
+                                                        units matches {"mm[Hg]"}
+                                                        magnitude matches {|0..<1000|}
+                                                        precision matches {|0..0|}
+                                                    }
+                                                }
+                                            }
+                                            ELEMENT[at1006] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_QUANTITY[at9003] occurrences matches {1..1} matches {
+                                                        property matches {[openehr::125]}
+                                                        units matches {"mm[Hg]"}
+                                                        magnitude matches {|0..750|}
+                                                        precision matches {|1..1|}
+                                                    }
+                                                }
+                                            }
+                                            ELEMENT[at1007] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_QUANTITY[at9004] occurrences matches {1..1} matches {
+                                                        property matches {[openehr::125]}
+                                                        units matches {"mm[Hg]"}
+                                                        magnitude matches {|0..750|}
+                                                        precision matches {|0..0|}
+                                                    }
+                                                }
+                                            }
+                                            ELEMENT[at0033] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_TEXT[at9005] occurrences matches {1..1}
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                state existence matches {0..1} matches {
+                                    ITEM_TREE[at0007] occurrences matches {1..1} matches {
+                                        items existence matches {0..1} cardinality matches {0..*; ordered} matches {
+                                            ELEMENT[at0008] occurrences matches {1..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_CODED_TEXT[at9006] occurrences matches {1..1} matches {
+                                                        defining_code existence matches {1..1} matches {
+                                                            [at1000], [at1001], [at1002], [at1003], [at1013], [at1014]
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            allow_archetype CLUSTER[at1030] occurrences matches {0..*} matches {
+                                                include
+                                                    archetype_id/value matches {/openEHR-EHR-CLUSTER\.sample_level_of_exertion\.v1/}
+                                            }
+                                            ELEMENT[at1005] occurrences matches {0..1} matches {
+                                                value existence matches {0..1} matches {
+                                                    DV_QUANTITY[at9007] occurrences matches {1..1} matches {
+                                                        property matches {[openehr::497]}
+                                                        units matches {"°"}
+                                                        magnitude matches {|-90..90|}
+                                                        precision matches {|0..0|}
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                protocol existence matches {0..1} matches {
+                    ITEM_TREE[at0011] occurrences matches {1..1} matches {
+                        items existence matches {0..1} cardinality matches {0..*; ordered} matches {
+                            ELEMENT[at0013] occurrences matches {0..1} matches {
+                                value existence matches {0..1} matches {
+                                    DV_CODED_TEXT[at9008] occurrences matches {1..1} matches {
+                                        defining_code existence matches {1..1} matches {
+                                            [at0015], [at0016], [at0017], [at1008], [at1009], [at1018], [at1019]
+                                        }
+                                    }
+                                }
+                            }
+                            ELEMENT[at0014] occurrences matches {0..1} matches {
+                                value existence matches {0..1} matches {
+                                    DV_CODED_TEXT[at9009] occurrences matches {1..1} matches {
+                                        defining_code existence matches {1..1} matches {
+                                            [at0025], [at0026], [at0027], [at0028], [at0032], [at1020], [at1021], [at1026], [at1031], [at1032]
+                                        }
+                                    }
+                                }
+                            }
+                            ELEMENT[at1010] occurrences matches {0..1} matches {
+                                value existence matches {0..1} matches {
+                                    DV_CODED_TEXT[at9010] occurrences matches {1..1} matches {
+                                        defining_code existence matches {1..1} matches {
+                                            [at1011], [at1012]
+                                        }
+                                    }
+                                }
+                            }
+                            allow_archetype CLUSTER[at1025] occurrences matches {0..*} matches {
+                                include
+                                    archetype_id/value matches {/openEHR-EHR-CLUSTER\.device\.v1/}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+terminology
+    term_definitions = <
+            ["en"] = <
+                ["at0000"] = <
+                    text = <"Blood pressure (Training sample)">
+                    description = <"The measurement of arterial blood pressure which is deemed to be a surrogate
+                        for arterial pressure in the systemic circulation.">
+                >
+                ["at0001"] = <
+                    text = <"history">
+                    description = <"history Structural node">
+                >
+                ["at0005"] = <
+                    text = <"Diastolic">
+                    description = <"Minimum systemic arterial blood pressure over one cycle - measured in the
+                        diastolic or relaxation phase">
+                >
+                ["at0006"] = <
+                    text = <"any event">
+                    description = <"Other event in event history">
+                >
+                ["at0002"] = <
+                    text = <"Baseline reading">
+                    description = <"Baseline event in event history">
+                >
+                ["at0003"] = <
+                    text = <"blood pressure">
+                    description = <"@ internal @">
+                >
+                ["at0004"] = <
+                    text = <"Systolic">
+                    description = <"Peak systemic arterial blood pressure over one cycle - measured in systolic
+                        or contraction phase of the heart cycle">
+                >
+                ["at0007"] = <
+                    text = <"state structure">
+                    description = <"@ internal @">
+                >
+                ["at0008"] = <
+                    text = <"Position">
+                    description = <"The position of the person at the time of measuring blood pressure">
+                >
+                ["at0009"] = <
+                    text = <"Date last serviced">
+                    description = <"The date the device was last serviced">
+                >
+                ["at0010"] = <
+                    text = <"Date last calibration">
+                    description = <"Date the device was last calibrated">
+                >
+                ["at0011"] = <
+                    text = <"list structure">
+                    description = <"list structure">
+                >
+                ["at0013"] = <
+                    text = <"Cuff size">
+                    description = <"The size of the cuff used for blood pressure measurement">
+                >
+                ["at0014"] = <
+                    text = <"Location of measurement">
+                    description = <"The site of the measurement of the blood pressure">
+                >
+                ["at0015"] = <
+                    text = <"Adult">
+                    description = <"A cuff that is standard for an adult - bladder approx 13cm x 30cm">
+                >
+                ["at0016"] = <
+                    text = <"Large Adult">
+                    description = <"A cuff for adults with larger arms - bladder approx 16cm x 38cm">
+                >
+                ["at0017"] = <
+                    text = <"Paediatric/Child">
+                    description = <"A cuff that is appropriate for a child or thin arm - bladder approx 8cm x 21
+                        cm">
+                >
+                ["at0025"] = <
+                    text = <"Right arm">
+                    description = <"The right arm of the person">
+                >
+                ["at0026"] = <
+                    text = <"Left arm">
+                    description = <"The left arm of the person">
+                >
+                ["at0027"] = <
+                    text = <"Right thigh">
+                    description = <"The right thigh of the person">
+                >
+                ["at0028"] = <
+                    text = <"Left thigh">
+                    description = <"The left thigh of the person">
+                >
+                ["at0029"] = <
+                    text = <"5 minute reading">
+                    description = <"Blood pressure reading after 5 minutes rest">
+                >
+                ["at0030"] = <
+                    text = <"10 minute reading">
+                    description = <"Blood pressure reading after 10 minutes rest">
+                >
+                ["at0031"] = <
+                    text = <"Postural change">
+                    description = <"The difference between standing and sitting/lying blood pressure">
+                >
+                ["at0032"] = <
+                    text = <"Intra-arterial">
+                    description = <"Blood pressure monitored via an intra-arterial line">
+                >
+                ["at0033"] = <
+                    text = <"Comment">
+                    description = <"Comment on blood pressure reading">
+                >
+                ["at1000"] = <
+                    text = <"Standing">
+                    description = <"Standing at the time of blood pressure measurement">
+                >
+                ["at1001"] = <
+                    text = <"Sitting">
+                    description = <"Sitting (for example on bed or chair) at the time of blood pressure
+                        measurement">
+                >
+                ["at1002"] = <
+                    text = <"Reclining">
+                    description = <"Reclining at the time of blood pressure measurement">
+                >
+                ["at1003"] = <
+                    text = <"Lying">
+                    description = <"Lying flat at the time of blood pressure measurement">
+                >
+                ["at1004"] = <
+                    text = <"Paradox">
+                    description = <"Variation in blood pressure with respiration">
+                >
+                ["at1005"] = <
+                    text = <"Tilt">
+                    description = <"The tilt of the surface on which the person is lying">
+                >
+                ["at1006"] = <
+                    text = <"Mean Arterial Pressure">
+                    description = <"The average arterial pressure that occurs over the entire course of the
+                        heart contraction and relaxation cycle. In non-invasive blood pressure measurements the MAP is
+                        calculated using (2 x Systolic Blood Pressure + Diastolic Blood Pressure) divided by 3.">
+                >
+                ["at1007"] = <
+                    text = <"Pulse Pressure">
+                    description = <"The difference between the systolic and diastolic pressure over one
+                        contraction cycle.">
+                >
+                ["at1008"] = <
+                    text = <"Adult Thigh">
+                    description = <"A cuff used for an adult thigh - bladder approx 20cm x 42 cm">
+                >
+                ["at1009"] = <
+                    text = <"Neonatal">
+                    description = <"A cuff used for a new born - bladder approx 3cm x 6cm">
+                >
+                ["at1010"] = <
+                    text = <"Korotkoff sounds">
+                    description = <"Record which Korotkoff sound is used for determining diastolic pressure">
+                >
+                ["at1011"] = <
+                    text = <"Fourth sound">
+                    description = <"The fourth Korotkoff sound is identified as an abrupt muffling of sounds">
+                >
+                ["at1012"] = <
+                    text = <"Fifth sound">
+                    description = <"The fifth Korotkoff sound is identified by absence of sounds as the cuff
+                        pressure drops below the diastolic blood pressure">
+                >
+                ["at1013"] = <
+                    text = <"Trendelenburg">
+                    description = <"Lying flat on the back (supine position) with the feet higher than the head
+                        at the time of blood pressure measurement">
+                >
+                ["at1014"] = <
+                    text = <"Left Lateral">
+                    description = <"Lying on the left side at the time of blood pressure measurement">
+                >
+                ["at1018"] = <
+                    text = <"Infant">
+                    description = <"A cuff used for infants - bladder approx 5cm x 15cm">
+                >
+                ["at1019"] = <
+                    text = <"Small Adult">
+                    description = <"A cuff used for a small adult - bladder approx 10cm x 24 cm">
+                >
+                ["at1020"] = <
+                    text = <"Right wrist">
+                    description = <"The right wrist of the person">
+                >
+                ["at1021"] = <
+                    text = <"Left wrist">
+                    description = <"The left wrist of the person">
+                >
+                ["at1025"] = <
+                    text = <"Device">
+                    description = <"Details about sphygmomanometer or other device used to measure the blood
+                        pressure">
+                >
+                ["at1026"] = <
+                    text = <"Finger">
+                    description = <"A finger of the person">
+                >
+                ["at1030"] = <
+                    text = <"Level of Exertion">
+                    description = <"Details about physical activity undertaken as the blood pressure is
+                        recorded">
+                >
+                ["at1031"] = <
+                    text = <"Right ankle">
+                    description = <"The right ankle of the person">
+                >
+                ["at1032"] = <
+                    text = <"Left ankle">
+                    description = <"The left ankle of the person">
+                >
+            >
+        >
+component_terminologies
+<
+            ["openEHR-EHR-CLUSTER.sample_device.v1"] = <
+                term_definitions = <
+                    ["en"] = <
+                        ["at0000"] = <
+                            text = <"Device details (training sample)">
+                            description = <"The details of the device used">
+                        >
+                        ["at0001"] = <
+                            text = <"Name">
+                            description = <"The name of the device">
+                        >
+                        ["at0002"] = <
+                            text = <"Description">
+                            description = <"Description of the device">
+                        >
+                        ["at0003"] = <
+                            text = <"Manufacturer">
+                            description = <"The name of the manufacturer">
+                        >
+                        ["at0004"] = <
+                            text = <"Manufacturer details">
+                            description = <"Information about the manufacture of the device">
+                        >
+                        ["at0005"] = <
+                            text = <"Model">
+                            description = <"The model of the device">
+                        >
+                        ["at0006"] = <
+                            text = <"Serial number">
+                            description = <"The serial number of the device">
+                        >
+                        ["at0007"] = <
+                            text = <"Components">
+                            description = <"Information about the device components">
+                        >
+                        ["at0008"] = <
+                            text = <"Servicing">
+                            description = <"Details of servicing">
+                        >
+                        ["at0009"] = <
+                            text = <"Date last serviced">
+                            description = <"The date the device was last serviced">
+                        >
+                        ["at0010"] = <
+                            text = <"Date last calibration">
+                            description = <"Date the device was last calibrated">
+                        >
+                        ["at0011"] = <
+                            text = <"Serviced by">
+                            description = <"Agent performed the servicing">
+                        >
+                    >
+                >
+            >
+            ["openEHR-EHR-COMPOSITION.sample_encounter.v1"] = <
+                term_definitions = <
+                    ["en"] = <
+                        ["at0000"] = <
+                            text = <"Encounter (training sample)">
+                            description = <"Generic encounter or progress note composition">
+                        >
+                        ["at0001"] = <
+                            text = <"Tree">
+                            description = <"@ internal @">
+                        >
+                        ["at0005"] = <
+                            text = <"Admin detail">
+                            description = <"*">
+                        >
+                        ["at0006"] = <
+                            text = <"Admin detail">
+                            description = <"*">
+                        >
+                    >
+                >
+            >
+            ["openEHR-EHR-OBSERVATION.sample_blood_pressure.v1"] = <
+                term_definitions = <
+                    ["en"] = <
+                        ["at0000"] = <
+                            text = <"Blood pressure (Training sample)">
+                            description = <"The measurement of arterial blood pressure which is deemed to be a surrogate
+                        for arterial pressure in the systemic circulation.">
+                        >
+                        ["at0001"] = <
+                            text = <"history">
+                            description = <"history Structural node">
+                        >
+                        ["at0002"] = <
+                            text = <"Baseline reading">
+                            description = <"Baseline event in event history">
+                        >
+                        ["at0003"] = <
+                            text = <"blood pressure">
+                            description = <"@ internal @">
+                        >
+                        ["at0004"] = <
+                            text = <"Systolic">
+                            description = <"Peak systemic arterial blood pressure over one cycle - measured in systolic
+                        or contraction phase of the heart cycle">
+                        >
+                        ["at0005"] = <
+                            text = <"Diastolic">
+                            description = <"Minimum systemic arterial blood pressure over one cycle - measured in the
+                        diastolic or relaxation phase">
+                        >
+                        ["at0006"] = <
+                            text = <"any event">
+                            description = <"Other event in event history">
+                        >
+                        ["at0007"] = <
+                            text = <"state structure">
+                            description = <"@ internal @">
+                        >
+                        ["at0008"] = <
+                            text = <"Position">
+                            description = <"The position of the person at the time of measuring blood pressure">
+                        >
+                        ["at0011"] = <
+                            text = <"list structure">
+                            description = <"list structure">
+                        >
+                        ["at0013"] = <
+                            text = <"Cuff size">
+                            description = <"The size of the cuff used for blood pressure measurement">
+                        >
+                        ["at0014"] = <
+                            text = <"Location of measurement">
+                            description = <"The site of the measurement of the blood pressure">
+                        >
+                        ["at0015"] = <
+                            text = <"Adult">
+                            description = <"A cuff that is standard for an adult - bladder approx 13cm x 30cm">
+                        >
+                        ["at0016"] = <
+                            text = <"Large Adult">
+                            description = <"A cuff for adults with larger arms - bladder approx 16cm x 38cm">
+                        >
+                        ["at0017"] = <
+                            text = <"Paediatric/Child">
+                            description = <"A cuff that is appropriate for a child or thin arm - bladder approx 8cm x 21
+                        cm">
+                        >
+                        ["at0025"] = <
+                            text = <"Right arm">
+                            description = <"The right arm of the person">
+                        >
+                        ["at0026"] = <
+                            text = <"Left arm">
+                            description = <"The left arm of the person">
+                        >
+                        ["at0027"] = <
+                            text = <"Right thigh">
+                            description = <"The right thigh of the person">
+                        >
+                        ["at0028"] = <
+                            text = <"Left thigh">
+                            description = <"The left thigh of the person">
+                        >
+                        ["at0029"] = <
+                            text = <"5 minute reading">
+                            description = <"Blood pressure reading after 5 minutes rest">
+                        >
+                        ["at0030"] = <
+                            text = <"10 minute reading">
+                            description = <"Blood pressure reading after 10 minutes rest">
+                        >
+                        ["at0031"] = <
+                            text = <"Postural change">
+                            description = <"The difference between standing and sitting/lying blood pressure">
+                        >
+                        ["at0032"] = <
+                            text = <"Intra-arterial">
+                            description = <"Blood pressure monitored via an intra-arterial line">
+                        >
+                        ["at0033"] = <
+                            text = <"Comment">
+                            description = <"Comment on blood pressure reading">
+                        >
+                        ["at1000"] = <
+                            text = <"Standing">
+                            description = <"Standing at the time of blood pressure measurement">
+                        >
+                        ["at1001"] = <
+                            text = <"Sitting">
+                            description = <"Sitting (for example on bed or chair) at the time of blood pressure
+                        measurement">
+                        >
+                        ["at1002"] = <
+                            text = <"Reclining">
+                            description = <"Reclining at the time of blood pressure measurement">
+                        >
+                        ["at1003"] = <
+                            text = <"Lying">
+                            description = <"Lying flat at the time of blood pressure measurement">
+                        >
+                        ["at1004"] = <
+                            text = <"Paradox">
+                            description = <"Variation in blood pressure with respiration">
+                        >
+                        ["at1005"] = <
+                            text = <"Tilt">
+                            description = <"The tilt of the surface on which the person is lying">
+                        >
+                        ["at1006"] = <
+                            text = <"Mean Arterial Pressure">
+                            description = <"The average arterial pressure that occurs over the entire course of the
+                        heart contraction and relaxation cycle. In non-invasive blood pressure measurements the MAP is
+                        calculated using (2 x Systolic Blood Pressure + Diastolic Blood Pressure) divided by 3.">
+                        >
+                        ["at1007"] = <
+                            text = <"Pulse Pressure">
+                            description = <"The difference between the systolic and diastolic pressure over one
+                        contraction cycle.">
+                        >
+                        ["at1008"] = <
+                            text = <"Adult Thigh">
+                            description = <"A cuff used for an adult thigh - bladder approx 20cm x 42 cm">
+                        >
+                        ["at1009"] = <
+                            text = <"Neonatal">
+                            description = <"A cuff used for a new born - bladder approx 3cm x 6cm">
+                        >
+                        ["at1010"] = <
+                            text = <"Korotkoff sounds">
+                            description = <"Record which Korotkoff sound is used for determining diastolic pressure">
+                        >
+                        ["at1011"] = <
+                            text = <"Fourth sound">
+                            description = <"The fourth Korotkoff sound is identified as an abrupt muffling of sounds">
+                        >
+                        ["at1012"] = <
+                            text = <"Fifth sound">
+                            description = <"The fifth Korotkoff sound is identified by absence of sounds as the cuff
+                        pressure drops below the diastolic blood pressure">
+                        >
+                        ["at1013"] = <
+                            text = <"Trendelenburg">
+                            description = <"Lying flat on the back (supine position) with the feet higher than the head
+                        at the time of blood pressure measurement">
+                        >
+                        ["at1014"] = <
+                            text = <"Left Lateral">
+                            description = <"Lying on the left side at the time of blood pressure measurement">
+                        >
+                        ["at1018"] = <
+                            text = <"Infant">
+                            description = <"A cuff used for infants - bladder approx 5cm x 15cm">
+                        >
+                        ["at1019"] = <
+                            text = <"Small Adult">
+                            description = <"A cuff used for a small adult - bladder approx 10cm x 24 cm">
+                        >
+                        ["at1020"] = <
+                            text = <"Right wrist">
+                            description = <"The right wrist of the person">
+                        >
+                        ["at1021"] = <
+                            text = <"Left wrist">
+                            description = <"The left wrist of the person">
+                        >
+                        ["at1025"] = <
+                            text = <"Device">
+                            description = <"Details about sphygmomanometer or other device used to measure the blood
+                        pressure">
+                        >
+                        ["at1026"] = <
+                            text = <"Finger">
+                            description = <"A finger of the person">
+                        >
+                        ["at1030"] = <
+                            text = <"Level of Exertion">
+                            description = <"Details about physical activity undertaken as the blood pressure is
+                        recorded">
+                        >
+                        ["at1031"] = <
+                            text = <"Right ankle">
+                            description = <"The right ankle of the person">
+                        >
+                        ["at1032"] = <
+                            text = <"Left ankle">
+                            description = <"The left ankle of the person">
+                        >
+                    >
+                >
+            >
+        >
+
+annotations
+    documentation = <
+            ["en"] = <
+                ["/category[at9000]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/context[at9001]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/context[at9001]/other_context[at0001]/items[at0006]/items[at0000]/items[at0001]/value[at9000]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/context[at9001]/other_context[at0001]/items[at0006]/items[at0000]/items[at0002]/value[at9001]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/context[at9001]/other_context[at0001]/items[at0006]/items[at0000]/items[at0004]/items[at0003]/value[at9002]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/context[at9001]/other_context[at0001]/items[at0006]/items[at0000]/items[at0004]/items[at0005]/value[at9003]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/context[at9001]/other_context[at0001]/items[at0006]/items[at0000]/items[at0004]/items[at0006]/value[at9004]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/context[at9001]/other_context[at0001]/items[at0006]/items[at0000]/items[at0007]/items[at9005]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/context[at9001]/other_context[at0001]/items[at0006]/items[at0000]/items[at0008]/items[at0009]/value[at9006]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/context[at9001]/other_context[at0001]/items[at0006]/items[at0000]/items[at0008]/items[at0010]/value[at9007]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/context[at9001]/other_context[at0001]/items[at0006]/items[at0000]/items[at0008]/items[at0011]/value[at9008]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/content[at0000]/data[at0001]/events[at0002]/offset[at9000]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/content[at0000]/data[at0001]/events[at0002]/data[at0003]/items[at0004]/value[at9001]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/content[at0000]/data[at0001]/events[at0002]/data[at0003]/items[at0005]/value[at9002]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/content[at0000]/data[at0001]/events[at0002]/data[at0003]/items[at1006]/value[at9003]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/content[at0000]/data[at0001]/events[at0002]/data[at0003]/items[at1007]/value[at9004]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/content[at0000]/data[at0001]/events[at0002]/data[at0003]/items[at0033]/value[at9005]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/content[at0000]/data[at0001]/events[at0002]/state[at0007]/items[at0008]/value[at9006]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/content[at0000]/data[at0001]/events[at0002]/state[at0007]/items[at1005]/value[at9007]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/content[at0000]/protocol[at0011]/items[at0013]/value[at9008]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/content[at0000]/protocol[at0011]/items[at0014]/value[at9009]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+                ["/content[at0000]/protocol[at0011]/items[at1010]/value[at9010]"] = <
+                    ["synthetic_node_id"] = <"true">
+                >
+            >
+        >
+

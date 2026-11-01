@@ -6,6 +6,7 @@
 export {
   ancestorsOf,
   attributesFor,
+  hasRmAttribute,
   hasRmType,
   isAbstractType,
   isDataValueType,

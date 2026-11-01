@@ -13,14 +13,22 @@ import {
   mapOriginalLanguage,
   mapTermDefinitions,
 } from "./odin_aom_mapper.ts";
-import type { OperationalTemplateWithTermScopes } from "../generation/term_scope.ts";
+import {
+  applyOperationalTemplateTermScopes,
+  type OperationalTemplateWithTermScopes,
+} from "../generation/term_scope.ts";
 import { CadlParser } from "./cadl_parser.ts";
+import { restoreSyntheticNodeIds } from "./synthetic_node_annotations.ts";
 import { RulesParser } from "./rules_parser.ts";
 import {
   applyAnnotationsOdin,
   applyRmOverlayOdin,
 } from "./aom_odin_sections.ts";
 import * as openehr_am from "../am/openehr_am.ts";
+import {
+  adl2CodingVersionWarning,
+  type CodedArtefact,
+} from "./legacy/adl2_coding_system.ts";
 import * as openehr_base from "../base/openehr_base.ts";
 
 /**
@@ -53,6 +61,12 @@ export class ADL2Parser {
     this.tokens = tokens;
   }
 
+  /** Warn (not fail) on an at-coded artefact with an ADL 2.0–2.3 header. */
+  private warnCodingVersion(artefact: CodedArtefact): void {
+    const warning = adl2CodingVersionWarning(artefact);
+    if (warning) this.warnings.push(warning);
+  }
+
   /**
    * Parse ADL2 text from tokens
    */
@@ -64,10 +78,23 @@ export class ADL2Parser {
     const keyword = this.peek().type;
     if (keyword === TokenType.TEMPLATE) {
       const template = this.parseTemplate();
+      this.warnCodingVersion(template);
       return { kind: "template", template, errors: this.errors, warnings: this.warnings };
     }
     if (keyword === TokenType.OPERATIONAL_TEMPLATE) {
       const operationalTemplate = this.parseOperationalTemplate();
+      this.warnCodingVersion(operationalTemplate);
+      // Nodes take their terms from the nearest archetype root's
+      // component_terminologies entry, as after OPT 1.4 parsing.
+      applyOperationalTemplateTermScopes(
+        operationalTemplate as OperationalTemplateWithTermScopes,
+      );
+      restoreSyntheticNodeIds(operationalTemplate);
+      const otherDetails = (operationalTemplate.description as { other_details?: unknown } | undefined)
+        ?.other_details as Record<string, unknown> | undefined;
+      if (typeof otherDetails?.template_id === "string") {
+        (operationalTemplate as { template_id?: string }).template_id = otherDetails.template_id;
+      }
       return {
         kind: "operational_template",
         operationalTemplate,
@@ -77,6 +104,7 @@ export class ADL2Parser {
     }
     if (keyword === TokenType.ARCHETYPE) {
       const archetype = this.parseArchetype();
+      this.warnCodingVersion(archetype);
       return { kind: "archetype", archetype, errors: this.errors, warnings: this.warnings };
     }
 
@@ -386,6 +414,11 @@ export class ADL2Parser {
       };
       for (const [archId, bag] of Object.entries(data)) {
         if (!bag || typeof bag !== "object" || Array.isArray(bag)) continue;
+        const rawBindings = (bag as OdinObject).term_bindings;
+        if (rawBindings && typeof rawBindings === "object" && !Array.isArray(rawBindings)) {
+          const meta = opt as { archetype_term_bindings?: Record<string, unknown> };
+          (meta.archetype_term_bindings ??= {})[archId] = rawBindings;
+        }
         const termDefs = (bag as OdinObject).term_definitions;
         if (termDefs === undefined) continue;
         const table = mapTermDefinitions(termDefs);

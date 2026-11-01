@@ -773,6 +773,12 @@ export class ADL2Serializer {
         return `${head} matches {${body}}\n`;
       }
     }
+    if (!prim.node_id) {
+      // ADL2 has no `TYPE occurrences …` form without a node id: an
+      // unconstrained string is `/.*/`, other types are written bare.
+      const rm = prim.rm_type_name || "STRING";
+      return `${indent}${rm === "STRING" ? "/.*/" : rm}\n`;
+    }
     return this.cObjectHead(prim.rm_type_name || "STRING", prim, level) + "\n";
   }
 
@@ -837,11 +843,8 @@ export class ADL2Serializer {
       ) {
         return `|${pattern}|`;
       }
-      const regexLike = /\\|\.\*|\^|\$/.test(pattern);
-      if (rm === "STRING" || rm === "DV_URI" || regexLike) {
-        return `/${pattern}/`;
-      }
-      return JSON.stringify(pattern);
+      // A quoted string is a value list (`list`); `pattern` is a regex.
+      return `/${pattern}/`;
     }
     if (prim instanceof openehr_am.C_INTEGER || prim instanceof openehr_am.C_REAL) {
       const list = (prim as { list?: number[] }).list;

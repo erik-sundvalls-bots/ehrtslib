@@ -4,7 +4,9 @@
 
 import { TypeRegistry } from "../common/type_registry.ts";
 import { hasRmType, isSubtypeOf } from "../../meta/mod.ts";
+import { nodeIdsMatch } from "../../generation/id_to_at_code.ts";
 import type { WebTemplateNode } from "./types.ts";
+import { type AqlPathSegment, aqlPathSegments } from "./normalize.ts";
 
 type RmObject = Record<string, unknown>;
 
@@ -35,14 +37,6 @@ function rmProp(obj: unknown, key: string): unknown {
   return undefined;
 }
 
-function normalizeNodeId(id: string): string {
-  if (/^id\d/i.test(id)) {
-    const digits = id.replace(/^id/i, "").replace(/\./g, "");
-    return `at${digits.padStart(4, "0")}`;
-  }
-  return id;
-}
-
 /**
  * True for RM types known not to be LOCATABLE (e.g. ISM_TRANSITION). They have
  * no archetype_node_id, so a template path predicate cannot be checked on them.
@@ -52,31 +46,33 @@ function isNonLocatable(obj: unknown): boolean {
   return !!type && hasRmType(type) && !isSubtypeOf(type, "LOCATABLE");
 }
 
-/** A single-valued attribute object matches the path predicate `nodeId`. */
-function singleMatchesNodeId(obj: unknown, nodeId: string): boolean {
+/** `name.value` of an RM object, as a string. */
+function nameValueOf(obj: unknown): string | undefined {
+  const value = rmProp(rmProp(obj, "name"), "value");
+  return value == null ? undefined : String(value);
+}
+
+/** The object matches the segment's node id and `name/value` predicate. */
+function matchesSegment(obj: unknown, seg: AqlPathSegment): boolean {
+  if (!seg.nodeId) return true;
+  if (!nodeIdsMatch(rmProp(obj, "archetype_node_id"), seg.nodeId)) return false;
+  return seg.nameValue === undefined || nameValueOf(obj) === seg.nameValue;
+}
+
+/** A single-valued attribute object matches the segment's predicate. */
+function singleMatchesSegment(obj: unknown, seg: AqlPathSegment): boolean {
   const id = rmProp(obj, "archetype_node_id");
   if (id == null || id === "") return isNonLocatable(obj);
-  return nodeIdsMatch(id, nodeId);
+  return matchesSegment(obj, seg);
 }
 
-function nodeIdsMatch(a: unknown, b: string): boolean {
-  if (a == null) return false;
-  const sa = String(a);
-  return sa === b || normalizeNodeId(sa) === normalizeNodeId(b);
+function pickBySegment(arr: unknown[], seg: AqlPathSegment): unknown {
+  return arr.find((item) => matchesSegment(item, seg)) ?? arr[0];
 }
 
-function pickByNodeId(arr: unknown[], nodeId: string): unknown {
-  const found = arr.find((item) =>
-    nodeIdsMatch(rmProp(item, "archetype_node_id"), nodeId)
-  );
-  return found ?? arr[0];
-}
-
-function valuesByNodeId(arr: unknown[], nodeId?: string): unknown[] {
-  if (!nodeId) return arr;
-  const found = arr.filter((item) =>
-    nodeIdsMatch(rmProp(item, "archetype_node_id"), nodeId)
-  );
+function valuesBySegment(arr: unknown[], seg: AqlPathSegment): unknown[] {
+  if (!seg.nodeId) return arr;
+  const found = arr.filter((item) => matchesSegment(item, seg));
   if (found.length) return found;
   // Fall back to unmatched items only when none of them carry a node id at
   // all (e.g. hand-built instances); otherwise a wrong-node match would
@@ -165,16 +161,13 @@ export function resolveAllAtWebTemplateNode(
 export function resolveAtPath(instance: unknown, aqlPath: string): unknown {
   if (!instance || !aqlPath) return null;
 
-  const normalized = aqlPath.replace(/\/+/g, "/");
-  const segments = normalized.match(/\/[^/]+/g);
-  if (!segments?.length) return instance;
+  const segments = aqlPathSegments(aqlPath);
+  if (!segments.length) return instance;
 
   let current: unknown = instance;
 
-  for (const raw of segments) {
-    const m = /^\/([^[]+)(?:\[([^\]]+)\])?$/.exec(raw);
-    if (!m) continue;
-    const [, attr, nodeId] = m;
+  for (const seg of segments) {
+    const { attr } = seg;
     const obj = current as RmObject;
     if (!obj || typeof obj !== "object") return null;
 
@@ -182,7 +175,7 @@ export function resolveAtPath(instance: unknown, aqlPath: string): unknown {
     if (next == null) return null;
 
     if (Array.isArray(next)) {
-      current = nodeId ? pickByNodeId(next, nodeId) : next[0];
+      current = seg.nodeId ? pickBySegment(next, seg) : next[0];
     } else {
       current = next;
     }
@@ -216,16 +209,13 @@ export function resolveAllValuesAtPath(
 ): ResolvedValue[] {
   if (!instance || !aqlPath) return [];
 
-  const normalized = aqlPath.replace(/\/+/g, "/");
-  const segments = normalized.match(/\/[^/]+/g);
-  if (!segments?.length) return [{ value: instance }];
+  const segments = aqlPathSegments(aqlPath);
+  if (!segments.length) return [{ value: instance }];
 
   let current: unknown[] = [instance];
 
-  for (const raw of segments) {
-    const m = /^\/([^[]+)(?:\[([^\]]+)\])?$/.exec(raw);
-    if (!m) continue;
-    const [, attr, nodeId] = m;
+  for (const seg of segments) {
+    const { attr } = seg;
     const nextValues: unknown[] = [];
 
     for (const item of current) {
@@ -235,9 +225,9 @@ export function resolveAllValuesAtPath(
       if (next == null) continue;
 
       if (Array.isArray(next)) {
-        nextValues.push(...valuesByNodeId(next, nodeId));
+        nextValues.push(...valuesBySegment(next, seg));
       } else if (
-        !nodeId || singleMatchesNodeId(next, nodeId)
+        !seg.nodeId || singleMatchesSegment(next, seg)
       ) {
         nextValues.push(next);
       }

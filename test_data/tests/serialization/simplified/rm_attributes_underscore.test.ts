@@ -249,6 +249,8 @@ Deno.test("_ prefix: set RM attributes without a FLAT path are emitted (RM → F
   assertEquals(out[`${EV}/dv_text/_mapping:0|match`], "=");
   assertEquals(out[`${EV}/dv_text/_mapping:0/target|code`], "123");
   assertEquals(read(out, wt).composition, rm);
+  const back = deserializeFromStructuredWithIssues(serializeToStructured(rm, wt), wt, { clock: CLOCK });
+  assertEquals(back.composition, rm);
 });
 
 Deno.test("_ prefix: EVENT offset is computed — not written, ignored with a warning on input", async () => {
@@ -368,4 +370,32 @@ Deno.test("ACTIVITY.action_archetype_id falls back to /.*/ without a template pa
   }, wt);
   const instr = (composition as Rm).content[0].items.find((i: Rm) => i._type === "INSTRUCTION");
   assertEquals(instr.activities[0].action_archetype_id, "/.*/");
+});
+
+Deno.test("_ prefix: coded LINK meaning is written as |meaning|code (spec form) and reads back", async () => {
+  const { wt } = await load("conformance_ehrbase.de.v0.opt");
+  const flat: FlatPayload = {
+    ...BASE,
+    ...ACT_BASE,
+    [`${R}/_link:0|type`]: "problem",
+    [`${R}/_link:0|target`]: "ehr://problem-123",
+    [`${R}/_link:0|meaning|code`]: "related_to",
+    [`${R}/_link:0|meaning|terminology`]: "local_terms",
+    [`${R}/_link:0|meaning|value`]: "Related to",
+  };
+  const { composition: rm, issues } = read(flat, wt);
+  assertEquals(issues.filter((i) => i.severity === "error"), []);
+  const meaning = (rm as Rm).links[0].meaning;
+  assertEquals(meaning._type, "DV_CODED_TEXT");
+  assertEquals(meaning.value, "Related to");
+  assertEquals(meaning.defining_code.code_string, "related_to");
+  assertEquals(meaning.defining_code.terminology_id.value, "local_terms");
+  const out = serializeToFlat(rm, wt);
+  assertEquals(out[`${R}/_link:0|meaning|code`], "related_to");
+  assertEquals(out[`${R}/_link:0|meaning|terminology`], "local_terms");
+  assertEquals(out[`${R}/_link:0|meaning|value`], "Related to");
+  assert(!Object.keys(out).some((k) => k.includes("_link:0/_meaning") || k === `${R}/_link:0|meaning`), JSON.stringify(out));
+  assertEquals(read(out, wt).composition, rm);
+  const back = deserializeFromStructuredWithIssues(serializeToStructured(rm, wt), wt, { clock: CLOCK });
+  assertEquals(back.composition, rm);
 });

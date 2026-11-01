@@ -3,17 +3,11 @@
  */
 
 import type * as openehr_am from "../am/openehr_am.ts";
+import { nodeIdToAtCode } from "../generation/id_to_at_code.ts";
 
 export interface PathResolveOptions {
   /** Archetype definition root for node-id → child mapping. */
   definition?: openehr_am.C_COMPLEX_OBJECT;
-}
-
-/** Map ADL node id `id2` to typical RM `archetype_node_id` `at0002`. */
-export function adlNodeIdToAtCode(nodeId: string): string {
-  const m = /^id(\d+)$/i.exec(nodeId.trim());
-  if (m) return `at${m[1].padStart(4, "0")}`;
-  return nodeId;
 }
 
 export class ArchetypePathResolver {
@@ -111,8 +105,8 @@ export class ArchetypePathResolver {
     defChild?: openehr_am.C_OBJECT,
   ): unknown {
     const atCode = defChild?.node_id
-      ? adlNodeIdToAtCode(defChild.node_id)
-      : adlNodeIdToAtCode(nodeId);
+      ? nodeIdToAtCode(defChild.node_id)
+      : nodeIdToAtCode(nodeId);
     const candidates = new Set([
       nodeId,
       atCode,

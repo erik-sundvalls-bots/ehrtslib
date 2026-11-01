@@ -11,6 +11,12 @@ import { XMLParser } from "fast-xml-parser";
 import * as openehr_am from "../../am/openehr_am.ts";
 import * as openehr_base from "../../base/openehr_base.ts";
 import { clonePreservingPrototype } from "../../generation/opt2_trim.ts";
+import { adl2VersionFor, markSyntheticNodeId } from "./adl2_coding_system.ts";
+import {
+  type ArchetypeConversionLog,
+  type ConversionRunLog,
+  PreviousConversionCodes,
+} from "./conversion_log.ts";
 import {
   COMPONENT_TERM_DEFINITIONS_KEY,
   TERM_ARCHETYPE_SCOPE_KEY,
@@ -41,7 +47,15 @@ export interface Opt14ValueSet {
   members: string[];
 }
 
-export interface Opt14UpconversionOptions extends Adl2CodingOptions {}
+export interface Opt14UpconversionOptions extends Adl2CodingOptions {
+  /**
+   * Conversion log in the format of Archie's converter (off by default).
+   * `true` returns a new log in {@link Opt14UpconversionResult.conversionLog};
+   * a previous log is also returned, updated, and its codes are reused for
+   * objects at the same attribute path with the same RM type.
+   */
+  conversionLog?: boolean | ConversionRunLog;
+}
 
 export interface Opt14UpconversionResult {
   operationalTemplate: openehr_am.OPERATIONAL_TEMPLATE;
@@ -51,6 +65,8 @@ export interface Opt14UpconversionResult {
   adl2CodingSystem: ReturnType<typeof resolveAdl2CodingSystem>;
   /** Value-set ac-codes minted for local code lists. */
   mintedValueSets: number;
+  /** Set when {@link Opt14UpconversionOptions.conversionLog} is given. */
+  conversionLog?: ConversionRunLog;
   warnings: string[];
 }
 
@@ -151,14 +167,6 @@ export function readOpt14Header(xml: string): Opt14Header {
     header.description = desc;
   }
   return header;
-}
-
-/** True when the template's node ids are ADL 1.4 at-codes (root `at0000`). */
-export function hasAdl14NodeIds(opt: openehr_am.OPERATIONAL_TEMPLATE): boolean {
-  const rootId = opt.definition?.node_id;
-  if (isAdl14AtCode(rootId)) return true;
-  if (rootId && /^id\d/.test(rootId)) return false;
-  return opt.adl_version === "1.4";
 }
 
 type Meta = Record<string, unknown>;
@@ -365,12 +373,34 @@ export function upconvertOpt14ToAdl2(
     }
   }
 
+  // Optional conversion log (Archie's format): previous codes are reused.
+  const previousLog = typeof options?.conversionLog === "object"
+    ? options.conversionLog
+    : undefined;
+  const runLog: ConversionRunLog | undefined = options?.conversionLog
+    ? { converted_archetypes: {} }
+    : undefined;
+  const previous = new Map<string, PreviousConversionCodes>();
+  const previousFor = (scope: string): PreviousConversionCodes => {
+    let p = previous.get(scope);
+    if (!p) {
+      p = new PreviousConversionCodes(previousLog?.converted_archetypes[scope]);
+      previous.set(scope, p);
+    }
+    return p;
+  };
+  const logFor = (scope: string): ArchetypeConversionLog | undefined =>
+    runLog
+      ? (runLog.converted_archetypes[scope] ??= { created_codes: {}, created_value_sets: {} })
+      : undefined;
+
   // Seed one minter per scope with every ADL2 code already in that scope.
   const minters = new Map<string, Opt14CodeMinter>();
   const minterFor = (scope: string): Opt14CodeMinter => {
     let m = minters.get(scope);
     if (m) return m;
     m = new Opt14CodeMinter(adl2CodingSystem);
+    for (const c of previousFor(scope).codes()) m.seen(c);
     const codes = scopes.get(scope);
     for (const c of codes?.nodeIds ?? []) m.seen(mapper.nodeIdToAdl2(c));
     for (const c of codes?.valueCodes ?? []) m.seen(mapper.valueCodeToAdl2(c));
@@ -401,9 +431,12 @@ export function upconvertOpt14ToAdl2(
     node: unknown,
     inherited: string,
     underAttribute: boolean,
+    attributePath: string,
   ) => {
     if (!node || typeof node !== "object") return;
     const scope = scopeOf(node, inherited);
+    // Paths restart at each archetype root (as in Archie's log).
+    const newScope = scope !== inherited || !underAttribute;
     const codes = scopes.get(scope);
     const obj = node as openehr_am.C_OBJECT;
     const meta = node as Meta;
@@ -411,8 +444,20 @@ export function upconvertOpt14ToAdl2(
       const id = obj.node_id;
       if (isAdl14AtCode(id)) obj.node_id = mapper.nodeIdToAdl2(id);
       else if (!id && underAttribute) {
-        obj.node_id = minterFor(scope).nextNodeId();
+        const code = previousFor(scope).take(attributePath, obj.rm_type_name) ??
+          minterFor(scope).nextNodeId();
+        obj.node_id = code;
+        markSyntheticNodeId(obj);
         mintedIdCodes++;
+        const log = logFor(scope);
+        if (log) {
+          log.created_codes[code] = {
+            generated_code: code,
+            reason_for_creation: "C_OBJECT_WITHOUT_NODE_ID",
+            path_created: attributePath,
+            rm_type_name: obj.rm_type_name,
+          };
+        }
       }
       const fallback = meta[TERM_NAME_FALLBACK_NODE_ID_KEY];
       if (typeof fallback === "string" && isAdl14AtCode(fallback)) {
@@ -448,6 +493,8 @@ export function upconvertOpt14ToAdl2(
         const ac = minterFor(scope).nextAc();
         tc.constraint = ac;
         (valueSets[scope] ??= {})[ac] = { id: ac, members: [...list] };
+        const log = logFor(scope);
+        if (log) log.created_value_sets[ac] = { id: ac, members: [...list] };
         mintedValueSets++;
       }
     }
@@ -460,9 +507,21 @@ export function upconvertOpt14ToAdl2(
         );
       }
     }
-    for (const c of childrenOf(node)) rewrite(c, scope, true);
+    const objectPath = newScope || isPrimitive(node)
+      ? ""
+      : `${attributePath}${obj.node_id ? `[${obj.node_id}]` : ""}`;
+    const attributeOf = new Map<unknown, string>();
+    for (const a of (node as { attributes?: openehr_am.C_ATTRIBUTE[] }).attributes ?? []) {
+      for (const c of (a as { children?: unknown[] }).children ?? []) {
+        if (a.rm_attribute_name) attributeOf.set(c, a.rm_attribute_name);
+      }
+    }
+    for (const c of childrenOf(node)) {
+      const name = attributeOf.get(c);
+      rewrite(c, scope, true, name ? `${objectPath}/${name}` : attributePath);
+    }
   };
-  rewrite(root, rootScope, false);
+  rewrite(root, rootScope, false, "");
 
   if (Object.keys(valueSets).length) {
     (opt as unknown as Meta)[ARCHETYPE_VALUE_SETS_KEY] = valueSets;
@@ -491,7 +550,7 @@ export function upconvertOpt14ToAdl2(
     ann.documentation = out;
   }
 
-  opt.adl_version = "2.0.5";
+  opt.adl_version = adl2VersionFor(adl2CodingSystem, "2.0.5");
   if (header?.templateId) opt.template_id = header.templateId;
   if (header?.description) opt.description = header.description;
 
@@ -499,6 +558,7 @@ export function upconvertOpt14ToAdl2(
     operationalTemplate: opt,
     mintedIdCodes,
     mintedValueSets,
+    conversionLog: runLog,
     warnings,
     adl2CodingSystem,
   };

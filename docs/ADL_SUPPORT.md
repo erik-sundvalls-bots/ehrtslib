@@ -45,8 +45,9 @@ const compiled = parseTemplateInput(oetXml, { archetypeRepository: repo });
 const xml = new OptXmlSerializer().serialize(opt!);
 
 // Compact ADL2 operational_template (OPT2) for LLM / tooling (#130, #157).
-// Leaf constraints and archetype slots are included. Node ids are ADL2
-// id-codes (`at0000` → `id1`); value-set at-codes and ac-codes are unchanged.
+// Leaf constraints and archetype slots are included. Node ids stay at-codes
+// (ADL 2.4, the default); pass `adl2CodingSystem: "id-coded"` for ADL2
+// id-codes (`at0000` → `id1`). Value-set at-codes and ac-codes are unchanged.
 // `languages` filters terminology only and keeps the definition.
 
 const opt2 = new OPT2Serializer().serializeOperationalTemplate(opt!);
@@ -188,6 +189,36 @@ That constraint is in the OPT 1.4 export (`exportAdl2TemplateToOpt14`), which is
 
 Helpers live in [`generation/opt_l10n.ts`](../generation/opt_l10n.ts). Background: [openEHR Discourse #2760](https://discourse.openehr.org/t/limitation-preventing-multilingual-repeated-parts-in-the-opt-operational-template-export-format/2760).
 
+## ADL2 coding systems (at-codes and id-codes)
+
+ADL 2.4 (AM 2.4.0, not yet released) has two node coding systems ([ADL2, node identifiers](https://specifications.openehr.org/releases/AM/development/ADL2.html#_node_identifier_and_coding_systems)). ehrtslib supports both in one build; there is no separate build. See [ADR 0015](adr/0015-adl2-coding-system-at-vs-id.md).
+
+| Coding system | Root node id | Header written | Use |
+|---|---|---|---|
+| `"at-coded"` (default) | `at0000` (`at0000.1` specialised) | `adl_version=2.4.0` | ADL 2.4, required for openEHR RM. **Experimental until AM 2.4.0 is released.** Same codes as ADL 1.4 and OPT 1.4, so the same data paths |
+| `"id-coded"` | `id1` (`id1.1`) | `adl_version=2.0.5` (OPT2) / `2.0.6` (archetype) | ADL 2.0–2.3, as Archie and other AM 2.3 tools read and write. Non-openEHR models |
+
+- **Choosing.** `adl2CodingSystem: "at-coded" | "id-coded"` on `upconvertOpt14ToAdl2`, `convertAdl14ToAdl2`, `OPT2Serializer.serializeOperationalTemplate` and `bindTemplate` picks the coding system of converted output. An id-coded input stays id-coded.
+- **Reading.** The ADL2 parser reads both. `adl2CodingSystemOf(artefact)` tells which one an archetype or template uses, from its root node id. `isAdl14Artefact` tells an OPT 1.4 (at-codes, no ADL 2 header) from at-coded ADL2. An at-coded artefact with an ADL 2.0–2.3 header parses with a warning, since AM 2.3 tools would read it as id-coded.
+- **Data paths.** RM data always carries at-codes in `archetype_node_id`. Web Template, FLAT, STRUCTURED and AQL paths are at-codes for both coding systems; id-codes map by the ADL2 rule (`id1` → `at0000`, `id5` → `at0004`, `id1.1` → `at0000.1`; `nodeIdToAtCode`). A template up-converted from OPT 1.4 gives the same Web Template as the OPT 1.4 in either coding system. Node ids minted on up-conversion (for OPT 1.4 nodes without one) are marked on the in-memory objects and in the ADL2 text, and left out of paths.
+- **OPT2 text round trip** ([#252](https://github.com/ErikSundvall/ehrtslib/issues/252)). An up-converted template written with `OPT2Serializer` and parsed again gives the same Web Template as the OPT 1.4, for every `test_data/opt14` fixture in both coding systems. A template id with characters the ADL2 parser cannot read (for example the spaces in `IDCR - Problem List.v1`) is written with `_` in their place (`IDCR_-_Problem_List.v1`). The original is kept in `description.other_details["template_id"]` and restored on parse, so the Web Template `templateId` stays the same. The written id is still not a full archetype HRID (`openEHR-EHR-COMPOSITION.x.v1`); neither are most OPT 1.4 template ids.
+- **Minted node ids.** Up-conversion mints `at9000+` (at-coded) or `id9000+` (id-coded) for OPT 1.4 objects without a node id, as Archie does. `OPT2Serializer` marks each one in `annotations`, keyed by the node's own path, which includes its minted code, so two id-less siblings of one RM type each get their own entry:
+
+  ```
+  annotations
+      documentation = <
+          ["en"] = <
+              ["/category[at9000]"] = <
+                  ["synthetic_node_id"] = <"true">
+              >
+          >
+      >
+  ```
+
+  The parser turns the entries back into the in-memory flag and removes them. This is on by default; `syntheticNodeIdAnnotations: false` leaves the marker out, and the minted ids are then ordinary node ids after a re-parse.
+- **Conversion log (optional, off by default).** For compatibility with Archie's format, `upconvertOpt14ToAdl2(opt, header, { conversionLog: true })` returns the created codes in the JSON shape of Archie's conversion log (`converted_archetypes` → `created_codes` / `created_value_sets`; `serializeConversionRunLog`, `parseConversionRunLog`). Pass a previous log as `conversionLog` to reuse its codes: each entry is reused for the next id-less object with the same attribute path (`path_created`) and RM type, in document order. Archie applies a previous code to the first object with that path and type, so with two id-less siblings of one type Archie cannot tell which one a code belonged to; the in-text annotations do not have that limit.
+- **id-coded node ids that collide with value codes** ([#252](https://github.com/ErikSundvall/ehrtslib/issues/252)). Node ids never move: a LOCATABLE node id always maps `idN` → `at(N−1)`, and node ids of data values (DV_*, CODE_PHRASE, …), which ADL 1.4 does not have, are dropped in ADL 1.4 output. A value code that would get a node's at-code shares it when the terms are the same, is written back to its bound external code (CKM-mirror faeces `property matches {[at19]}` → `[openehr::128]`), or else moves to `at9000+` with a warning. The OPT 1.4 export, `ADL14Serializer` (archetype text), Web Template value codes, FLAT/STRUCTURED codes and Contribution Builder down-conversion use the same rule; for a template it is one cached map per archetype (`adl14CodeFor`, `adl14CodeMapFor`). `prepareContribution` takes the map from each draft's bound template; standalone `downConvertToAdl14` takes it from its `operationalTemplate` option.
+
 ## ADL 1.4 conversion
 
 
@@ -200,7 +231,7 @@ Helpers live in [`generation/opt_l10n.ts`](../generation/opt_l10n.ts). Backgroun
 
 |--------|--------|
 
-| Header metadata | Inserts `adl_version=2.0.6`, `rm_release`, optional `generated` |
+| Header metadata | Inserts `adl_version=2.4.0` (at-coded, default) or `2.0.6` (id-coded), `rm_release`, optional `generated` |
 
 | `ontology` → `terminology` | Also parsed directly via `ONTOLOGY` token |
 
@@ -210,7 +241,7 @@ Helpers live in [`generation/opt_l10n.ts`](../generation/opt_l10n.ts). Backgroun
 
 | `term_definitions` / `items` wrapper | Flattened (ADL 1.4 ODIN shape) |
 
-| **at-code keys** | `[at0000]` → `[id1]`, `[at0001]` → `[id2]`, `[at0000.1]` → `[id1.1]` in terminology (same shift as node ids). `at0.1` is not shifted. Section boundaries are column 0, so an indented `description` key does not end the terminology block |
+| **at-code keys** (id-coded only) | `[at0000]` → `[id1]`, `[at0001]` → `[id2]`, `[at0000.1]` → `[id1.1]` in terminology (same shift as node ids). `at0.1` is not shifted. Section boundaries are column 0, so an indented `description` key does not end the terminology block |
 
 | **constraint_definitions** | Merged into `term_definitions` by code key |
 
