@@ -365,12 +365,12 @@ for review:
   bundles, so users who don't need GraphQL don't carry it.
 - It covers uncommitted Contribution Builder content only. Committed EHR data stays with AQL
   and REST.
-- A node is addressed by `uid`, or by a path whose steps can mix ADL2
-  codes, node names in a chosen ISO `lang` (default `lang.1`), **any
-  template annotation** (`@key=value`), symbols (`$name`, shorthand for
-  `a.id` or `am.symbol_binding`) and 0-based indexes. Annotation values
-  need not be unique: a path that matches several nodes is narrowed by
-  adding prefix steps.
+- A node is addressed by `uid`, or by a path whose steps can mix node
+  codes (at-codes or id-codes), node names in a chosen ISO `lang` (default
+  `lang.1`), **any template annotation** (`@key=value`), symbols
+  (`$name`, shorthand for `a.id` or `am.symbol_binding`) and 0-based
+  indexes. Annotation values need not be unique: a path that matches
+  several nodes is narrowed by adding prefix steps.
 
   Examples use `test_data/opt14/simple-diagnose-and-vitals.opt` (Simple
   vitals, en/sv/de), whose annotations are `ui.section = vitals` on the five
@@ -378,19 +378,24 @@ for review:
   `systolic` and `rate` (on both Respiration and Pulse). The strings use the
   shorthand form; typed steps are canonical, and escaping of `/` and `=` is
   still open ([ADR 0011](../adr/0011-cb-optional-graphql-api.md) question 3).
+  ADL 2.4 (AM 2.4.0, not yet released) brings back the ADL 1.4 at-code system for nodes and requires it
+  for openEHR RM systems, with id-codes left for other models
+  ([ADL2, coding systems](https://specifications.openehr.org/releases/AM/development/ADL2.html#_node_identifier_and_coding_systems),
+  [SPECAM-90](https://openehr.atlassian.net/browse/SPECAM-90)); the resolver
+  accepts both.
 
   | Style | Example | Resolves to |
   | --- | --- | --- |
   | uid | `<uuid>::a3.17` | that one node instance |
-  | ADL2 codes | `openEHR-EHR-OBSERVATION.blood_pressure.v2/data[id2]/events[id7]/data[id4]/items[id5]` | Systolic in every event |
-  | ADL 1.4 codes | `openEHR-EHR-OBSERVATION.blood_pressure.v2/data[at0001]/events[at0006]/data[at0003]/items[at0004]` | the same, at-codes mapped to id-codes |
+  | Node codes, at-code style | `openEHR-EHR-OBSERVATION.blood_pressure.v2/data[at0001]/events[at0006]/data[at0003]/items[at0004]` | Systolic in every event |
+  | Node codes, id-code style (older ADL2) | `openEHR-EHR-OBSERVATION.blood_pressure.v2/data[id2]/events[id7]/data[id4]/items[id5]` | the same |
   | Names, default `lang.1` (en) | `Blood pressure/Any event/Systolic` | the same |
   | Names, `lang=sv` | `Blodtryck/Ospecificerad händelse/Systoliskt` | the same |
   | Annotation | `@ui.section=vitals` | the five observations |
   | Symbol (`a.id`) | `$systolic` | Systolic in every event |
   | Symbol (`am.symbol_binding`) | `$bp` | the Blood pressure observation |
   | 0-based index | `Blood pressure/Any event:1/Systolic` | Systolic in the second event |
-  | Mixed | `$bp/Any event:0/data[id4]/items[id5]` | Systolic in the first event |
+  | Mixed | `$bp/Any event:0/data[at0003]/items[at0004]` | Systolic in the first event |
   | Ambiguous | `$rate` | Rate in Respiration and in Pulse; a mutation fails and lists both |
   | Narrowed | `$pulse/$rate` or `Respiration/$rate` | only the Pulse rate, or only the Respiration rate |
 - Every address resolves to uids, and every mutation becomes ordinary

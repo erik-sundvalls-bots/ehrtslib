@@ -13,8 +13,11 @@ languages.
 
 People and agents name nodes in different ways:
 
-- by **ADL2 codes**: archetype id plus id-codes or at-codes along a path,
-  for example `openEHR-EHR-OBSERVATION.blood_pressure.v2/data[id2]/events[id7]/data[id4]/items[id5]`;
+- by **node codes**: archetype id plus at-codes or id-codes along a path,
+  for example `openEHR-EHR-OBSERVATION.blood_pressure.v2/data[at0001]/events[at0006]/data[at0003]/items[at0004]`
+  (at-codes, which ADL 2.4 requires for the openEHR RM,
+  [SPECAM-90](https://openehr.atlassian.net/browse/SPECAM-90)) or
+  `…/data[id2]/events[id7]/data[id4]/items[id5]` (id-codes, ADL 2.0–2.3);
 - by **natural-language names** of the nodes in a chosen language, for
   example `Blodtryck/Systoliskt` in Swedish or `Blood pressure/Systolic` in
   English;
@@ -49,9 +52,10 @@ Every change must still go through the operation log and target a node uid
   committed EHR data stays with AQL and the REST API.
 - **A `NodeAddress` is either a `uid` or a path of steps.** The steps can
   be mixed freely in one path, and each step is one of:
-  - a **code step**: an ADL2 id-code (or an at-code for ADL 1.4 style
-    callers, mapped with the existing id-code to at-code mapping), with the
-    archetype id where a path enters an archetype;
+  - a **code step**: a node code in either coding system, at-code (ADL 1.4
+    and at-coded ADL 2.4) or id-code (ADL 2.0–2.3), mapped to each other with
+    the existing id-code to at-code mapping, with the archetype id where a
+    path enters an archetype;
   - a **name step**: a node name from the bound template's terminology in
     the request's `lang`, or a Web Template node id;
   - an **annotation step**: `@key=value`, matching template nodes that
@@ -181,7 +185,7 @@ Every change must still go through the operation log and target a node uid
    depend on the chosen language and would need Web Template style
    normalisation. Proposed: generic schema now, and an optional generated
    schema later with ASCII-folded Web Template ids as field names and the
-   ADL2 code in a directive such as `@node(code: "id5")`.
+   node code in a directive such as `@node(code: "at0004")`.
 2. **Symbol uniqueness (decided by Erik, 2026-10-25):** not required. Any
    annotation can address nodes, and non-unique matches need more path
    prefixing (see Decision). The evidence below is kept for the record.
