@@ -8,6 +8,8 @@ Add an entry under **Unreleased** in every PR that changes user-visible behaviou
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-01
+
 - **Behaviour change.** Both ADL2 coding systems are supported in one build, with the coding system read from each artefact's root node id: at-coded (ADL 2.4, the default, experimental until AM 2.4.0) and id-coded (ADL 2.0–2.3). New `adl2CodingSystemOf`, `isAdl14Artefact`, `adl2VersionFor` and `AT_CODED_ADL_VERSION`; `hasAdl14NodeIds` is removed (use `isAdl14Artefact`). See docs/ADL_SUPPORT.md "ADL2 coding systems" and ADR 0015 ([#246](https://github.com/ErikSundvall/ehrtslib/issues/246)).
 - **Breaking.** Node ids map from id-codes to at-codes by the ADL2 rule everywhere (`id1` → `at0000`, `id5` → `at0004`, `id1.1` → `at0000.1`). Web Template, FLAT and STRUCTURED paths and node ids of id-coded templates used `id5` → `at0005` and so were off by one; they now match the OPT 1.4 and the data a CDR holds. Path matching (`resolveAomPath`, `ArchetypePathResolver`, FLAT/RM navigation) follows the same rule ([#246](https://github.com/ErikSundvall/ehrtslib/issues/246)).
 - **Behaviour change.** The Web Template of an ADL2 template up-converted from OPT 1.4 equals the OPT 1.4 one, in both coding systems: ids, names, paths, occurrences and node ids. Node ids minted on up-conversion and node ids of data values are left out of paths; a term missing from the archetype's own terms no longer falls back to another archetype's term with the same code ([#246](https://github.com/ErikSundvall/ehrtslib/issues/246)).
