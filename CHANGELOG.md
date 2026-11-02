@@ -9,6 +9,7 @@ Add an entry under **Unreleased** in every PR that changes user-visible behaviou
 ## [Unreleased]
 
 - FLAT and STRUCTURED read back every key their writers emit. A DV_CODED_TEXT on a DV_TEXT node keeps `|code`, `|value`, `|terminology` and reads as DV_CODED_TEXT. The value of an ELEMENT without a value constraint is written and read under a `<type>_value` segment (`…/any/text_value`, `…/any/quantity_value|magnitude`), as in Simplified Formats §5.8; it was a bare key without its type that the reader rejected ([#255](https://github.com/ErikSundvall/ehrtslib/issues/255)).
+- `webTemplateToOpt` keeps name-constrained siblings (two `SECTION.adhoc` headings, `[id and name/value='X']` or `[id,'X']`) as separate objects with a `name` constraint, so OPT → Web Template → OPT → Web Template keeps both with their names and children. L10n path annotations written from a Web Template keep the name predicate ([#256](https://github.com/ErikSundvall/ehrtslib/issues/256)).
 
 ## [0.10.0] - 2026-11-01
 

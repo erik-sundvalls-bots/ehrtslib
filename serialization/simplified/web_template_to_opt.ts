@@ -28,6 +28,7 @@
 import * as openehr_am from "../../am/openehr_am.ts";
 import * as openehr_base from "../../base/openehr_base.ts";
 import { aqlPathSegments } from "./normalize.ts";
+import { fixedNameConstraint } from "./web_template_builder.ts";
 import type {
   QuantityItemInterval,
   QuantityItemRuntime,
@@ -80,10 +81,16 @@ function intervalFromValidationRange(
 interface AqlSegment {
   attr: string;
   nodeId?: string;
+  /** `name/value` predicate: a name-constrained sibling (e.g. two SECTION.adhoc). */
+  nameValue?: string;
 }
 
 function parseAqlPath(aqlPath: string): AqlSegment[] {
-  return aqlPathSegments(aqlPath).map(({ attr, nodeId }) => ({ attr, nodeId }));
+  return aqlPathSegments(aqlPath).map(({ attr, nodeId, nameValue }) => ({
+    attr,
+    nodeId,
+    nameValue,
+  }));
 }
 
 function isArchetypeId(nodeId?: string): boolean {
@@ -121,6 +128,20 @@ function wrapperRmType(parentRmType: string, attr: string): string {
   if (attr === "activities") return "ACTIVITY";
   if (attr === "context") return "EVENT_CONTEXT";
   return "CLUSTER";
+}
+
+/**
+ * Put `name` constraints after the other attributes, where template tools
+ * write them, so the Web Template children keep their order.
+ */
+function moveNameConstraintsLast(obj: openehr_am.C_OBJECT): void {
+  const attrs = (obj as { attributes?: openehr_am.C_ATTRIBUTE[] }).attributes;
+  if (!attrs?.length) return;
+  const name = attrs.findIndex((a) => a.rm_attribute_name === "name");
+  if (name !== -1 && name !== attrs.length - 1) attrs.push(...attrs.splice(name, 1));
+  for (const attr of attrs) {
+    for (const child of attr.children ?? []) moveNameConstraintsLast(child);
+  }
 }
 
 type TermBag = Record<
@@ -199,6 +220,7 @@ export class WebTemplateToOptConverter {
       this.insertNode(root, child, 0);
     }
 
+    moveNameConstraintsLast(root);
     opt.definition = root;
 
     const ontology = new openehr_am.ARCHETYPE_ONTOLOGY();
@@ -296,6 +318,7 @@ export class WebTemplateToOptConverter {
           wrapperRmType(current.rm_type_name ?? "", seg.attr),
           false,
           this.scopeOf(current),
+          seg.nameValue,
         );
         continue;
       }
@@ -312,6 +335,7 @@ export class WebTemplateToOptConverter {
             "ELEMENT",
             false,
             this.scopeOf(current),
+            seg.nameValue,
           );
           element.occurrences = multiplicity(node.min ?? 0, node.max ?? 1);
           const valueAttr = this.ensureAttribute(element, "value");
@@ -340,6 +364,7 @@ export class WebTemplateToOptConverter {
         node.rmType,
         /* forceUnclaimed */ true,
         this.scopeOf(current),
+        seg.nameValue,
       );
       this.claimed.add(obj);
       obj.occurrences = multiplicity(node.min ?? 0, node.max ?? 1);
@@ -558,10 +583,12 @@ export class WebTemplateToOptConverter {
     rmType: string,
     forceUnclaimed = false,
     inheritedScope?: string,
+    nameValue?: string,
   ): openehr_am.C_COMPLEX_OBJECT {
     attr.children ??= [];
     const existing = attr.children.find((c) =>
       (nodeId ? c.node_id === nodeId : c.rm_type_name === rmType) &&
+      fixedNameConstraint(c) === nameValue &&
       !(forceUnclaimed &&
         this.claimed.has(c as openehr_am.C_COMPLEX_OBJECT))
     );
@@ -579,8 +606,39 @@ export class WebTemplateToOptConverter {
     if (scope) {
       (obj as TermScopeMeta)[TERM_ARCHETYPE_SCOPE_KEY] = scope;
     }
+    if (nameValue !== undefined) this.addNameConstraint(obj, nameValue, scope);
     attr.children.push(obj);
     return obj;
+  }
+
+  /**
+   * `name matches {DV_TEXT matches {value matches {"…"}}}`, as template
+   * tools write it for a renamed archetype or node occurrence; it is what
+   * gives the sibling its `name/value` path predicate.
+   */
+  private addNameConstraint(
+    obj: openehr_am.C_COMPLEX_OBJECT,
+    name: string,
+    scope?: string,
+  ): void {
+    const nameAttr = this.ensureAttribute(obj, "name");
+    nameAttr.existence = multiplicity(1, 1);
+    const text = new openehr_am.C_COMPLEX_OBJECT();
+    text.rm_type_name = "DV_TEXT";
+    text.occurrences = multiplicity(1, 1);
+    this.stampScope(text, scope);
+    const valueAttr = this.ensureAttribute(text, "value");
+    valueAttr.existence = multiplicity(1, 1);
+    const prim = new openehr_am.C_PRIMITIVE_OBJECT();
+    prim.rm_type_name = "STRING";
+    prim.occurrences = multiplicity(1, 1);
+    this.stampScope(prim, scope);
+    const str = new openehr_am.C_STRING();
+    (str as { list?: string[] }).list = [name];
+    (str as unknown as { rm_type_name?: string }).rm_type_name = "STRING";
+    prim.item = str;
+    valueAttr.children = [prim];
+    nameAttr.children = [text];
   }
 }
 
