@@ -16,6 +16,7 @@ import type {
 } from "./types.ts";
 import { templateRootId } from "./normalize.ts";
 import { getFieldMap } from "./dv_field_maps.ts";
+import { nodeForChain } from "./element_value_choice.ts";
 
 const CTX_FIELDS = new Set([
   "language",
@@ -65,6 +66,10 @@ function knownSuffixes(node: WebTemplateNode): Set<string> {
   }
   const map = getFieldMap(node.rmType);
   if (map) for (const f of map.fields) suffixes.add(f.suffix);
+  // A DV_CODED_TEXT may stand where DV_TEXT is constrained.
+  if (node.rmType === "DV_TEXT") {
+    for (const f of getFieldMap("DV_CODED_TEXT")?.fields ?? []) suffixes.add(f.suffix);
+  }
   if (suffixes.has("")) suffixes.add("value");
   if (node.rmType === "DV_CODED_TEXT") suffixes.add("other");
   if (node.rmType.startsWith("PARTY_")) suffixes.add("_type");
@@ -127,7 +132,7 @@ export function validateFlatPayload(
     if (!chainSegs.length) continue;
 
     const chain = chainSegs.join("/");
-    const node = chains.get(chain);
+    const node = nodeForChain(chains, chain);
     if (!node) {
       report(key, "Unknown flat key for template");
       continue;

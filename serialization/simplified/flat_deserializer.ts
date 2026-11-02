@@ -10,6 +10,11 @@
  * @see docs/vendor/simplified_formats.md
  */
 
+import {
+  elementValueChoiceNode,
+  isUnconstrainedElement,
+  valueChoiceType,
+} from "./element_value_choice.ts";
 import { templateAttributes } from "./flat_serializer.ts";
 import type { FlatPayload, WebTemplate, WebTemplateNode } from "./types.ts";
 import {
@@ -330,6 +335,29 @@ export class FlatDeserializer {
     return node ? { node, segments } : undefined;
   }
 
+  /**
+   * Leaf node for `<type>_value` below an ELEMENT without a value
+   * constraint; indexed like a template node once it has been seen.
+   */
+  private valueChoice(
+    elementSegments: ParsedSegment[],
+    element: WebTemplateNode,
+    segmentId: string,
+  ): WebTemplateNode | undefined {
+    if (!isUnconstrainedElement(element)) return undefined;
+    const rmType = valueChoiceType(segmentId);
+    if (!rmType) return undefined;
+    const chain = [...elementSegments.map((s) => s.id), segmentId].join("/");
+    let node = this.nodeByChain.get(chain);
+    if (!node) {
+      node = elementValueChoiceNode(element, rmType);
+      const elementChain = elementSegments.map((s) => s.id).join("/");
+      this.nodeByChain.set(chain, node);
+      this.pathNodes.set(chain, [...this.pathNodes.get(elementChain) ?? [], node]);
+    }
+    return node;
+  }
+
   /** RM types an attribute segment below `node` may belong to (ELEMENT first for a leaf). */
   private attributeOwners(node: WebTemplateNode): string[] {
     if (node === this.webTemplate.tree) return ["COMPOSITION"];
@@ -356,6 +384,10 @@ export class FlatDeserializer {
       const prefix = this.matchChain(segments.slice(0, j));
       if (!prefix) continue;
       const seg = segments[j].id;
+      const choice = this.valueChoice(segments.slice(0, j), prefix.node, seg);
+      if (choice) {
+        return { node: choice, segments: segments.slice(0, j + 1), attr: segments.slice(j + 1) };
+      }
       // An attribute the template already covers (OBSERVATION `data`, …) has
       // no FLAT path of its own.
       if (templateAttributes(prefix.node, this.webTemplate).has(seg)) return undefined;

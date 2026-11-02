@@ -66,6 +66,8 @@ Background: [research note on FLAT/STRUCTURED input and output flavours and `ctx
 - HISTORY and a single EVENT with max 1 have no path segment (spec "Level Removal").
 - Repeating nodes use zero-based `:n` indices (`blood_pressure:0/any_event:0/...`).
 - Typed attributes use pipe suffixes on the key (`|magnitude`, `|unit`, `|code`, `|value`, `|terminology`).
+- A DV_CODED_TEXT where the template constrains DV_TEXT (an RM subtype) keeps its DV_CODED_TEXT fields: `|code`, `|value`, `|terminology` select DV_CODED_TEXT on input.
+- An ELEMENT without a value constraint takes any data value. Its type is a `<type>_value` segment, the type without `DV_` in lower case, as in the spec's §5.8 example: `…/any/text_value`, `…/any/quantity_value|magnitude`, `…/any/coded_text_value|code`. A bare key on such an ELEMENT is an `unknown-key` issue.
 
 Example (from openEHR curated example `openehr://examples/flat/vital_signs_blood_pressure`):
 

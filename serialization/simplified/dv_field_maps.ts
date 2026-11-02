@@ -571,6 +571,22 @@ function interpretCodedTextBareField(
   return { ...rest, value: text };
 }
 
+/** `|code` or `|terminology` is set: the value is a DV_CODED_TEXT. */
+function hasCodedTextField(
+  fields: Record<string, string | number | boolean | null | undefined>,
+): boolean {
+  return fields.code != null || fields.terminology != null;
+}
+
+/** The bare DV_TEXT key is the coded text's `|value`. */
+function textBareAsValue(
+  fields: Record<string, string | number | boolean | null | undefined>,
+): Record<string, string | number | boolean | null | undefined> {
+  if (fields[""] == null || fields.value != null) return fields;
+  const { "": bare, ...rest } = fields;
+  return { ...rest, value: bare };
+}
+
 /**
  * Build an RM data value object (plain, with `_type` markers) from
  * simplified-format fields keyed by suffix ("" = bare).
@@ -587,14 +603,23 @@ export function buildDvValue(
   fields: Record<string, string | number | boolean | null | undefined>,
   context?: DvValueBuildContext,
 ): RmObject {
-  const resolved = resolveDvType(rmType);
-  const codedNode = context ? nodeFromContext(context) : undefined;
+  const declared = resolveDvType(rmType);
+  // DV_CODED_TEXT may stand where DV_TEXT is constrained (RM subtype): its
+  // `|code` / `|terminology` select it, as the writer emits them.
+  const resolved = declared === "DV_TEXT" && hasCodedTextField(fields)
+    ? "DV_CODED_TEXT"
+    : declared;
+  const codedNode = context && declared === resolved
+    ? nodeFromContext(context)
+    : undefined;
   const source = codedNode && resolved === "DV_CODED_TEXT"
     ? interpretCodedTextBareField(
       fields,
       listedCodes(codedNode),
       nodeTerminology(codedNode),
     )
+    : declared !== resolved
+    ? textBareAsValue(fields)
     : fields;
   const map = getFieldMap(resolved) ?? fallbackFor(resolved);
   const root: RmObject = { _type: resolved };

@@ -8,6 +8,8 @@ Add an entry under **Unreleased** in every PR that changes user-visible behaviou
 
 ## [Unreleased]
 
+- FLAT and STRUCTURED read back every key their writers emit. A DV_CODED_TEXT on a DV_TEXT node keeps `|code`, `|value`, `|terminology` and reads as DV_CODED_TEXT. The value of an ELEMENT without a value constraint is written and read under a `<type>_value` segment (`…/any/text_value`, `…/any/quantity_value|magnitude`), as in Simplified Formats §5.8; it was a bare key without its type that the reader rejected ([#255](https://github.com/ErikSundvall/ehrtslib/issues/255)).
+
 ## [0.10.0] - 2026-11-01
 
 - **Behaviour change.** Both ADL2 coding systems are supported in one build, with the coding system read from each artefact's root node id: at-coded (ADL 2.4, the default, experimental until AM 2.4.0) and id-coded (ADL 2.0–2.3). New `adl2CodingSystemOf`, `isAdl14Artefact`, `adl2VersionFor` and `AT_CODED_ADL_VERSION`; `hasAdl14NodeIds` is removed (use `isAdl14Artefact`). See docs/ADL_SUPPORT.md "ADL2 coding systems" and ADR 0015 ([#246](https://github.com/ErikSundvall/ehrtslib/issues/246)).
